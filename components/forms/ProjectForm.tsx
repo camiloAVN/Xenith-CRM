@@ -143,7 +143,7 @@ export function ProjectForm({
         />
 
         <Select
-          label="Asignado a *"
+          label="Líder del Proyecto *"
           options={userOptions}
           error={errors.assignedTo?.message}
           {...register('assignedTo')}

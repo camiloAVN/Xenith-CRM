@@ -25,10 +25,16 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   // Relations
-  accounts   Account[]
-  sessions   Session[]
-  projects   Project[]
-  quotations Quotation[]
+  accounts          Account[]
+  sessions          Session[]
+  projects          Project[]
+  quotations        Quotation[]
+  assignedTasks     Task[]          @relation("TaskAssignee")
+  reportedTasks     Task[]          @relation("TaskReporter")
+  taskComments      TaskComment[]
+  taskHistory       TaskHistory[]
+  taskAttachments   TaskAttachment[]
+  projectMembers    ProjectMember[]
 
   @@map("users")
 }
@@ -116,10 +122,11 @@ model Project {
   updatedAt   DateTime      @updatedAt
 
   // Relations
-  client       Client      @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  assignedUser User        @relation(fields: [assignedTo], references: [id], onDelete: Restrict)
+  client       Client          @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  assignedUser User            @relation(fields: [assignedTo], references: [id], onDelete: Restrict)
   quotations   Quotation[]
   tasks        Task[]
+  members      ProjectMember[]
 
   @@index([clientId])
   @@index([assignedTo])
@@ -127,23 +134,108 @@ model Project {
   @@map("projects")
 }
 
-// Task model (sub-tasks for projects)
+// Task model (sub-tasks for projects) — full Jira-style
 model Task {
-  id          String     @id @default(cuid())
-  projectId   String
-  title       String
-  description String?    @db.Text
-  status      TaskStatus @default(TODO)
-  dueDate     DateTime?
-  completed   Boolean    @default(false)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id             String     @id @default(cuid())
+  projectId      String
+  title          String
+  description    String?    @db.Text
+  status         TaskStatus @default(TODO)
+  priority       Priority   @default(MEDIUM)
+  assignedTo     String?
+  reporterId     String?
+  dueDate        DateTime?
+  estimatedHours Float?
+  actualHours    Float?
+  order          Int        @default(0)
+  tags           String[]   @default([])
+  completed      Boolean    @default(false)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  // Relations
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignedUser   User?            @relation("TaskAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
+  reporter       User?            @relation("TaskReporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  comments       TaskComment[]
+  attachments    TaskAttachment[]
+  history        TaskHistory[]
+
+  @@index([projectId])
+  @@index([assignedTo])
+  @@index([status])
+  @@index([dueDate])
+  @@map("tasks")
+}
+
+// Task Comments
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_comments")
+}
+
+// Task Attachments (stub — no upload UI yet)
+model TaskAttachment {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  filename  String
+  url       String
+  size      Int
+  mimeType  String
+  createdAt DateTime @default(now())
+
+  // Relations
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_attachments")
+}
+
+// Task History (audit log)
+model TaskHistory {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  field     String   // status, assigned_to, due_date, priority
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_history")
+}
+
+// Project Members
+model ProjectMember {
+  id        String      @id @default(cuid())
+  projectId String
+  userId    String
+  role      ProjectRole @default(DEVELOPER)
+  createdAt DateTime    @default(now())
 
   // Relations
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([projectId])
-  @@map("tasks")
+  @@unique([projectId, userId])
+  @@map("project_members")
 }
 
 // Quotation model
@@ -216,7 +308,9 @@ enum Priority {
 enum TaskStatus {
   TODO
   IN_PROGRESS
+  REVIEW
   DONE
+  BLOCKED
 }
 
 enum QuotationStatus {
@@ -231,4 +325,11 @@ enum UserRole {
   SUPERADMIN // Solo camilo.vargas@xenith.com.co
   ADMIN      // Administradores
   USER       // Usuarios normales
+}
+
+enum ProjectRole {
+  ADMIN
+  PROJECT_MANAGER
+  DEVELOPER
+  VIEWER
 }
