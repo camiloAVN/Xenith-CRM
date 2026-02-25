@@ -10,7 +10,7 @@
 
 import { useState } from 'react'
 import { Download, Users, TrendingUp, Clock, Calendar, BarChart3 } from 'lucide-react'
-import * as XLSX from 'xlsx'
+import { exportStandExcel } from '../_lib/exportExcel'
 
 // ═══════════════════════════════════════════════════════════════
 // DATOS DEL EVENTO — Reemplazar con datos reales cuando estén listos
@@ -73,33 +73,17 @@ function lighten(hex: string, amount: number) {
 // EXCEL EXPORT
 // ═══════════════════════════════════════════════════════════════
 
-function downloadExcel() {
-  const wb = XLSX.utils.book_new()
-
-  const rows: (string | number)[][] = [
-    [STAND_NAME, '', '', ''],
-    ['Hora', 'Día 1', 'Día 2', 'Día 3'],
-    ...HOURS.map((hour, i) => [
-      hour,
-      STAND_DAYS[0][i],
-      STAND_DAYS[1][i],
-      STAND_DAYS[2][i],
-    ]),
-    ['', '', '', ''],
-    [
-      'Total por día',
-      getDayTotal(0),
-      getDayTotal(1),
-      getDayTotal(2),
-    ],
-    ['', '', '', ''],
-    ['Total general', getTotal(), '', ''],
-  ]
-
-  const ws = XLSX.utils.aoa_to_sheet(rows)
-  ws['!cols'] = [{ wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }]
-  XLSX.utils.book_append_sheet(wb, ws, STAND_NAME)
-  XLSX.writeFile(wb, 'feria-stand2.xlsx')
+async function downloadExcel() {
+  await exportStandExcel({
+    eventName: EVENT_NAME,
+    clientName: CLIENT_NAME,
+    standName: STAND_NAME,
+    standColor: STAND_COLOR,
+    hours: HOURS,
+    dayLabels: DAY_LABELS,
+    eventDates: EVENT_DATES,
+    standDays: STAND_DAYS,
+  })
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -258,6 +242,16 @@ function DailyChart() {
 
 export default function EstadisticasStand2() {
   const [selectedDay, setSelectedDay] = useState(0)
+  const [exporting, setExporting] = useState(false)
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await downloadExcel()
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const total = getTotal()
   const peak = getPeakHour(selectedDay)
@@ -280,22 +274,23 @@ export default function EstadisticasStand2() {
           </div>
 
           <button
-            onClick={downloadExcel}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors"
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition-all disabled:opacity-60 disabled:cursor-wait"
             style={{
               backgroundColor: 'rgba(168,85,247,0.1)',
               borderColor: 'rgba(168,85,247,0.3)',
               color: '#c084fc',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(168,85,247,0.2)'
+              if (!exporting) e.currentTarget.style.backgroundColor = 'rgba(168,85,247,0.2)'
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.backgroundColor = 'rgba(168,85,247,0.1)'
             }}
           >
-            <Download size={11} />
-            Descargar Excel
+            <Download size={11} className={exporting ? 'animate-bounce' : ''} />
+            {exporting ? 'Generando...' : 'Descargar Excel'}
           </button>
         </div>
       </header>

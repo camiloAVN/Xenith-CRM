@@ -41,6 +41,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-/prisma
 
 CLAUDE.md
+
+backup.sql
