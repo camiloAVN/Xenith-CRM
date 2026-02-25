@@ -42,6 +42,7 @@ export default function UsersPage() {
     email: '',
     password: '',
     role: 'USER' as UserRole,
+    position: '',
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -97,9 +98,10 @@ export default function UsersPage() {
             name: formData.name,
             email: formData.email,
             role: formData.role,
+            position: formData.position || null,
             ...(formData.password && { password: formData.password }),
           }
-        : formData
+        : { ...formData, position: formData.position || null }
 
       const response = await fetch(url, {
         method,
@@ -173,6 +175,7 @@ export default function UsersPage() {
       email: user.email,
       password: '',
       role: user.role,
+      position: user.position || '',
     })
     setShowModal(true)
   }
@@ -183,6 +186,7 @@ export default function UsersPage() {
       email: '',
       password: '',
       role: 'USER',
+      position: '',
     })
     setEditingUser(null)
   }
@@ -238,6 +242,7 @@ export default function UsersPage() {
                   <tr>
                     <th>Usuario</th>
                     <th>Email</th>
+                    <th>Cargo</th>
                     <th>Rol</th>
                     <th>Estado</th>
                     <th>Creado</th>
@@ -256,6 +261,7 @@ export default function UsersPage() {
                         </div>
                       </td>
                       <td className="text-gray-400">{user.email}</td>
+                      <td className="text-gray-400">{user.position || '—'}</td>
                       <td>
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
@@ -370,6 +376,15 @@ export default function UsersPage() {
                 }
                 required={!editingUser}
                 helperText="Minimo 8 caracteres, incluir mayuscula, minuscula y numero"
+              />
+
+              <Input
+                label="Cargo"
+                placeholder="Ej: Desarrollador, Diseñador..."
+                value={formData.position}
+                onChange={(e) =>
+                  setFormData({ ...formData, position: e.target.value })
+                }
               />
 
               <Select

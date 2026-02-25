@@ -25,7 +25,7 @@ export default function ContactoPage() {
     {
       icon: MapPin,
       title: 'Ubicación',
-      value: 'Ciudad de México, México',
+      value: 'Bogota, Colombia',
       link: null,
     },
     {

@@ -20,6 +20,11 @@ export const createUserSchema = z.object({
     .regex(/[a-z]/, 'Debe contener al menos una minuscula')
     .regex(/[0-9]/, 'Debe contener al menos un numero'),
   role: z.enum(userRoles).default('USER'),
+  position: z
+    .string()
+    .max(100, 'El cargo no puede exceder 100 caracteres')
+    .optional()
+    .nullable(),
 })
 
 export const updateUserSchema = z.object({
@@ -42,17 +47,41 @@ export const updateUserSchema = z.object({
     .regex(/[0-9]/, 'Debe contener al menos un numero')
     .optional(),
   role: z.enum(userRoles).optional(),
+  position: z
+    .string()
+    .max(100, 'El cargo no puede exceder 100 caracteres')
+    .optional()
+    .nullable(),
   isActive: z.boolean().optional(),
 })
 
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'La contrasena actual es requerida'),
+    newPassword: z
+      .string()
+      .min(8, 'La contrasena debe tener al menos 8 caracteres')
+      .max(128, 'La contrasena no puede exceder 128 caracteres')
+      .regex(/[A-Z]/, 'Debe contener al menos una mayuscula')
+      .regex(/[a-z]/, 'Debe contener al menos una minuscula')
+      .regex(/[0-9]/, 'Debe contener al menos un numero'),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'Las contrasenas no coinciden',
+    path: ['confirmPassword'],
+  })
+
 export type CreateUserFormData = z.infer<typeof createUserSchema>
 export type UpdateUserFormData = z.infer<typeof updateUserSchema>
+export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>
 
 export type User = {
   id: string
   name: string | null
   email: string
   role: UserRole
+  position: string | null
   isActive: boolean
   createdAt: Date
   updatedAt: Date

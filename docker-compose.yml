@@ -1,7 +1,9 @@
+name: XENITH-systems
+
 services:
   postgres:
-    image: postgres:16-alpine
-    container_name: xenith_db
+    image: postgres:16
+    container_name: xenith-crm-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: xenith

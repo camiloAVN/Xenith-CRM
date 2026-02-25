@@ -35,6 +35,7 @@ export async function GET(
         name: true,
         email: true,
         role: true,
+        position: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,
@@ -123,6 +124,7 @@ export async function PUT(
       ...(validatedData.name && { name: validatedData.name }),
       ...(validatedData.email && { email: validatedData.email.toLowerCase() }),
       ...(validatedData.role && { role: validatedData.role }),
+      ...('position' in validatedData && { position: validatedData.position ?? null }),
       ...(validatedData.isActive !== undefined && { isActive: validatedData.isActive }),
     }
 
@@ -139,6 +141,7 @@ export async function PUT(
         name: true,
         email: true,
         role: true,
+        position: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,

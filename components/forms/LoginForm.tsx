@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
 import { signIn } from 'next-auth/react'
+import { Eye, EyeOff } from 'lucide-react'
 import { loginSchema, LoginFormData } from '@/lib/validations/auth'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
@@ -15,6 +16,7 @@ export function LoginForm() {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
 
   const {
     register,
@@ -72,10 +74,19 @@ export function LoginForm() {
 
       <Input
         label="Contraseña"
-        type="password"
+        type={showPassword ? 'text' : 'password'}
         placeholder="••••••••"
         error={errors.password?.message}
         autoComplete="current-password"
+        rightIcon={
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        }
         {...register('password')}
       />
 

@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   UserCog,
   Shield,
+  CircleUser,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { Button } from '@/components/ui/Button'
@@ -190,6 +191,15 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                 </p>
               </div>
             </div>
+
+            <Link
+              href="/dashboard/perfil"
+              onClick={onClose}
+              className="flex items-center gap-2 w-full px-2 py-2 mb-1 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-gray-900 transition-all duration-200"
+            >
+              <CircleUser className="w-4 h-4" />
+              Mi Perfil
+            </Link>
 
             <Button
               variant="ghost"
