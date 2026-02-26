@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -88,11 +89,15 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         <div className="flex h-full flex-col">
           {/* Logo */}
           <div className="flex h-16 items-center justify-between px-6 border-b border-gray-800">
-            <Link href="/dashboard" className="flex items-center space-x-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-lg">X</span>
-              </div>
-              <span className="text-lg font-bold text-gradient">XENITH</span>
+            <Link href="/dashboard" className="flex items-center">
+              <Image
+                src="/images/xenith-logo.png"
+                alt="XENITH"
+                width={200}
+                height={40}
+                className="h-9 w-auto object-contain"
+                priority
+              />
             </Link>
 
             {/* Close button (mobile only) */}

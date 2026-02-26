@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import Link from 'next/link'
 
 export default function AuthLayout({
@@ -15,11 +16,15 @@ export default function AuthLayout({
       </div>
 
       {/* Logo */}
-      <Link href="/inicio" className="absolute top-8 left-8 flex items-center space-x-2 group">
-        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center shadow-lg group-hover:shadow-violet-500/50 transition-shadow duration-200">
-          <span className="text-white font-bold text-xl">X</span>
-        </div>
-        <span className="text-xl font-bold text-gradient">XENITH</span>
+      <Link href="/inicio" className="absolute top-8 left-8 flex items-center group">
+        <Image
+          src="/images/xenith-logo.png"
+          alt="XENITH"
+          width={200}
+          height={48}
+          className="h-10 sm:h-11 w-auto object-contain transition-opacity duration-200 group-hover:opacity-85"
+          priority
+        />
       </Link>
 
       {/* Content */}

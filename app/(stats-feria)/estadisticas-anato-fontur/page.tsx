@@ -9,7 +9,9 @@
  */
 
 import { useState } from 'react'
-import { Download, Users, TrendingUp, Clock, Calendar, BarChart3 } from 'lucide-react'
+import Image from 'next/image'
+import Link from 'next/link'
+import { Download, Users, TrendingUp, Clock, Calendar, BarChart3, ExternalLink } from 'lucide-react'
 import { exportStandExcel } from '../_lib/exportExcel'
 
 // ═══════════════════════════════════════════════════════════════
@@ -263,35 +265,57 @@ export default function EstadisticasStand1() {
       {/* ── Header ── */}
       <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-500 mb-0.5">
-              XENITH · {CLIENT_NAME}
+          <div className="flex items-center gap-3">
+            <Link href="/inicio">
+              <Image
+                src="/images/xenith-logo.png"
+                alt="XENITH"
+                width={120}
+                height={32}
+                className="h-8 w-auto object-contain opacity-90 hover:opacity-100 transition-opacity"
+              />
+            </Link>
+            <div className="h-8 w-px bg-slate-700 hidden sm:block" />
+            <div className="hidden sm:block">
+              <div className="text-[10px] font-bold tracking-[0.2em] uppercase text-slate-500 mb-0.5">
+                {CLIENT_NAME}
+              </div>
+              <h1 className="text-lg font-bold text-white leading-tight">
+                {EVENT_NAME} —{' '}
+                <span style={{ color: STAND_COLOR }}>{STAND_NAME}</span>
+              </h1>
             </div>
-            <h1 className="text-lg font-bold text-white leading-tight">
-              {EVENT_NAME} —{' '}
-              <span style={{ color: STAND_COLOR }}>{STAND_NAME}</span>
-            </h1>
           </div>
 
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition-all disabled:opacity-60 disabled:cursor-wait"
-            style={{
-              backgroundColor: 'rgba(59,130,246,0.1)',
-              borderColor: 'rgba(59,130,246,0.3)',
-              color: '#60a5fa',
-            }}
-            onMouseEnter={(e) => {
-              if (!exporting) e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.2)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.1)'
-            }}
-          >
-            <Download size={11} className={exporting ? 'animate-bounce' : ''} />
-            {exporting ? 'Generando...' : 'Descargar Excel'}
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/inicio"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-all"
+            >
+              Conoce más
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition-all disabled:opacity-60 disabled:cursor-wait"
+              style={{
+                backgroundColor: 'rgba(59,130,246,0.1)',
+                borderColor: 'rgba(59,130,246,0.3)',
+                color: '#60a5fa',
+              }}
+              onMouseEnter={(e) => {
+                if (!exporting) e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.2)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.1)'
+              }}
+            >
+              <Download size={11} className={exporting ? 'animate-bounce' : ''} />
+              {exporting ? 'Generando...' : 'Descargar Excel'}
+            </button>
+          </div>
         </div>
       </header>
 

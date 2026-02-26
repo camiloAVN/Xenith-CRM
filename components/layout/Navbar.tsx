@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu, X } from 'lucide-react'
@@ -22,13 +23,18 @@ export function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-gray-800/50 glass">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-20">
+
           {/* Logo */}
-          <Link href="/inicio" className="flex items-center space-x-2 group">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center shadow-lg group-hover:shadow-violet-500/50 transition-shadow duration-200">
-              <span className="text-white font-bold text-xl">X</span>
-            </div>
-            <span className="text-xl font-bold text-gradient">XENITH</span>
+          <Link href="/inicio" className="flex items-center group">
+            <Image
+              src="/images/xenith-logo.png"
+              alt="XENITH"
+              width={220}
+              height={56}
+              className="h-14 w-auto object-contain transition-opacity duration-200 group-hover:opacity-85"
+              priority
+            />
           </Link>
 
           {/* Desktop Navigation */}
