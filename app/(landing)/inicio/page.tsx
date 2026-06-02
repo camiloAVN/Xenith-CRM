@@ -10,6 +10,8 @@ export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [formSuccess, setFormSuccess] = useState(false)
   const [formErrors, setFormErrors] = useState<Record<string, boolean>>({})
+  const [formSending, setFormSending] = useState(false)
+  const [formApiError, setFormApiError] = useState('')
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const heroRef = useRef<HTMLElement>(null)
   const cursorRef = useRef<HTMLDivElement>(null)
@@ -239,7 +241,7 @@ export default function LandingPage() {
     message: v => v.trim().length >= 5,
   }
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const form = e.currentTarget
     const errors: Record<string, boolean> = {}
@@ -252,7 +254,35 @@ export default function LandingPage() {
       }
     })
     setFormErrors(errors)
-    if (ok) setFormSuccess(true)
+    if (!ok) return
+
+    const getValue = (name: string) =>
+      (form.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(`[name="${name}"]`)?.value ?? '').trim()
+
+    setFormSending(true)
+    setFormApiError('')
+    try {
+      const res = await fetch('/api/cotizacion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: getValue('name'),
+          email: getValue('email'),
+          company: getValue('company') || undefined,
+          type: getValue('type'),
+          message: getValue('message'),
+        }),
+      })
+      if (res.ok) {
+        setFormSuccess(true)
+      } else {
+        setFormApiError('No se pudo enviar. Intenta de nuevo o escríbenos directamente.')
+      }
+    } catch {
+      setFormApiError('Error de red. Intenta de nuevo.')
+    } finally {
+      setFormSending(false)
+    }
   }
 
   const closeMenu = () => setMenuOpen(false)
@@ -705,8 +735,12 @@ export default function LandingPage() {
                       onChange={() => setFormErrors(e => ({ ...e, message: false }))} />
                     <span className="err">Escribe un mensaje.</span>
                   </div>
-                  <button type="submit" className="btn btn--primary btn--lg">
-                    Enviar solicitud <span className="arrow">→</span>
+                  {formApiError && (
+                    <p style={{ color: '#ff7a86', fontSize: 13, margin: '0 0 4px' }}>{formApiError}</p>
+                  )}
+                  <button type="submit" className="btn btn--primary btn--lg" disabled={formSending}
+                    style={{ opacity: formSending ? 0.7 : 1, cursor: formSending ? 'wait' : 'pointer' }}>
+                    {formSending ? 'Enviando…' : <>Enviar solicitud <span className="arrow">→</span></>}
                   </button>
                 </>
               ) : (
