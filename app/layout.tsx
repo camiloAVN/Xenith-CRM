@@ -20,11 +20,6 @@ export const metadata: Metadata = {
     template: "%s | XENITH",
   },
   description: "Soluciones innovadoras en ingeniería robótica y desarrollo de software. Transformamos ideas en realidad tecnológica.",
-  icons: {
-    icon: [{ url: '/images/icono_xenith.png', type: 'image/png' }],
-    shortcut: '/images/icono_xenith.png',
-    apple: '/images/icono_xenith.png',
-  },
 };
 
 export default function RootLayout({
