@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+const isProd = process.env.NODE_ENV === 'production'
+
 const securityHeaders = [
   {
     key: 'X-DNS-Prefetch-Control',
@@ -33,12 +35,14 @@ const securityHeaders = [
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+      `script-src 'self' 'unsafe-inline'${isProd ? '' : " 'unsafe-eval'"}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' blob: data: https:",
-      "font-src 'self' data:",
+      // next/font/google descarga las fuentes en build-time y las sirve desde /_next/static/
+      // fonts.gstatic.com cubre el preconnect que el browser hace independientemente
+      "font-src 'self' data: https://fonts.gstatic.com",
       "connect-src 'self' https:",
-      "frame-ancestors 'self'",
+      "frame-ancestors 'none'",
       "form-action 'self'",
       "base-uri 'self'",
     ].join('; ')

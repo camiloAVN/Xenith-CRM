@@ -62,9 +62,15 @@ export function checkRateLimit(
     }
   }
 
-  // Check if blocked
+  // Check if blocked — extend resetTime by blockDurationMs on first hit
   if (entry.count >= config.maxAttempts) {
-    const blockDuration = config.blockDurationMs || config.windowMs
+    if (config.blockDurationMs) {
+      const extendedUntil = now + config.blockDurationMs
+      if (extendedUntil > entry.resetTime) {
+        entry.resetTime = extendedUntil
+        rateLimitStore.set(key, entry)
+      }
+    }
     return {
       success: false,
       remaining: 0,

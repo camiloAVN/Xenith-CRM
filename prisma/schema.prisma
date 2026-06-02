@@ -6,8 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // User model (managed by Auth.js)
@@ -35,6 +36,7 @@ model User {
   taskHistory       TaskHistory[]
   taskAttachments   TaskAttachment[]
   projectMembers    ProjectMember[]
+  earnings          Earning[]       @relation("UserEarnings")
 
   @@map("users")
 }
@@ -127,6 +129,7 @@ model Project {
   quotations   Quotation[]
   tasks        Task[]
   members      ProjectMember[]
+  earnings     Earning[]
 
   @@index([clientId])
   @@index([assignedTo])
@@ -289,6 +292,25 @@ model QuotationItem {
   @@map("quotation_items")
 }
 
+// Earnings model
+model Earning {
+  id          String      @id @default(cuid())
+  description String
+  amount      Decimal     @db.Decimal(14, 2) // positivo = ingreso / ganancia; negativo = deducción
+  type        EarningType
+  projectId   String?
+  userId      String?     // solo para USER_EARNING — a quién pertenece
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  user    User?    @relation("UserEarnings", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([userId])
+  @@map("earnings")
+}
+
 // Enums
 enum ProjectStatus {
   PROSPECT     // Prospecto
@@ -325,6 +347,12 @@ enum UserRole {
   SUPERADMIN // Solo camilo.vargas@xenith.com.co
   ADMIN      // Administradores
   USER       // Usuarios normales
+}
+
+enum EarningType {
+  COMPANY_INCOME  // Ingreso de la empresa (solo visible en detalle para SUPERADMIN)
+  DEDUCTION       // Gasto operativo / impuesto (amount negativo)
+  USER_EARNING    // Ganancia personal de un usuario
 }
 
 enum ProjectRole {

@@ -69,6 +69,10 @@ export default function EditProjectPage({
         <Card.Content>
           <ProjectForm
             project={projectData}
+            initialMemberIds={
+              (projectData?.members ?? [])
+                .map((m: { userId: string }) => m.userId)
+            }
             onSubmit={handleSubmit}
             onCancel={handleCancel}
             isSubmitting={isLoading}

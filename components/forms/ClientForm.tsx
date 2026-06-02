@@ -95,8 +95,8 @@ export function ClientForm({
         />
 
         <Input
-          label="RFC / Tax ID"
-          placeholder="XAXX010101000"
+          label="NIT"
+          placeholder="900.123.456-7"
           error={errors.taxId?.message}
           {...register('taxId')}
         />

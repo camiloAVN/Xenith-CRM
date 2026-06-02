@@ -12,6 +12,7 @@ export const projectSchema = z.object({
   budget: z.string().optional(),
   tags: z.array(z.string()).optional(),
   notes: z.string().optional(),
+  memberIds: z.array(z.string()).optional(),
 })
 
 export type ProjectFormData = z.infer<typeof projectSchema>

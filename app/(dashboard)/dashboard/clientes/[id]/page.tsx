@@ -129,7 +129,7 @@ export default function ClientDetailPage({
                   <div className="flex items-start gap-3">
                     <FileText className="w-5 h-5 text-violet-400 mt-0.5" />
                     <div>
-                      <p className="text-sm text-gray-400">RFC / Tax ID</p>
+                      <p className="text-sm text-gray-400">NIT</p>
                       <p className="font-medium">{clientData.taxId}</p>
                     </div>
                   </div>

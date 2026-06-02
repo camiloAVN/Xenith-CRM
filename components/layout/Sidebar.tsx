@@ -13,6 +13,7 @@ import {
   UserCog,
   Shield,
   CircleUser,
+  TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { Button } from '@/components/ui/Button'
@@ -50,6 +51,11 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       name: 'Cotizaciones',
       href: '/dashboard/cotizaciones',
       icon: FileText,
+    },
+    {
+      name: 'Ganancias',
+      href: '/dashboard/ganancias',
+      icon: TrendingUp,
     },
   ]
 

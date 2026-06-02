@@ -37,6 +37,13 @@ export async function GET(
             email: true,
           },
         },
+        members: {
+          select: {
+            userId: true,
+            role: true,
+            user: { select: { id: true, name: true, email: true } },
+          },
+        },
         tasks: {
           orderBy: { createdAt: 'desc' },
         },
@@ -97,23 +104,22 @@ export async function PUT(
         notes: validatedData.notes || null,
       },
       include: {
-        client: {
-          select: {
-            id: true,
-            name: true,
-            company: true,
-            email: true,
-          },
-        },
-        assignedUser: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+        client: { select: { id: true, name: true, company: true, email: true } },
+        assignedUser: { select: { id: true, name: true, email: true } },
       },
     })
+
+    // Sincronizar miembros si se enviaron
+    if (validatedData.memberIds !== undefined) {
+      await prisma.projectMember.deleteMany({ where: { projectId: id } })
+      const { memberIds = [], assignedTo } = validatedData
+      const uniqueMemberIds = [...new Set(memberIds.filter((uid) => uid !== assignedTo))]
+      const memberRecords = [
+        { projectId: id, userId: assignedTo, role: 'PROJECT_MANAGER' as const },
+        ...uniqueMemberIds.map((userId) => ({ projectId: id, userId, role: 'DEVELOPER' as const })),
+      ]
+      await prisma.projectMember.createMany({ data: memberRecords, skipDuplicates: true })
+    }
 
     return NextResponse.json(project)
   } catch (error) {

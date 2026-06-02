@@ -24,6 +24,9 @@ export function Footer() {
       { label: 'Nosotros', href: '/inicio#nosotros' },
       { label: 'Soluciones', href: '/soluciones' },
       { label: 'Contacto', href: '/contacto' },
+      { label: 'CEO', href: '/equipo/ceo' },
+      { label: 'CTO', href: '/equipo/cto' },
+      { label: 'VP Engineering', href: '/equipo/vpe' },
     ],
     legal: [
       { label: 'Privacidad', href: '#' },

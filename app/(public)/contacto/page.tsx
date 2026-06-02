@@ -2,6 +2,9 @@ import { ContactForm } from '@/components/forms/ContactForm'
 import { Card } from '@/components/ui/Card'
 import { Metadata } from 'next'
 import { Mail, Phone, MapPin, Clock } from 'lucide-react'
+import Link from 'next/link'
+import Image from 'next/image'
+import { teamMembers } from '@/lib/data/team'
 
 export const metadata: Metadata = {
   title: 'Contacto - XENITH',
@@ -83,6 +86,44 @@ export default function ContactoPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* ── Equipo directivo ─────────────────────────────────── */}
+              <div className="mt-8 pt-6 border-t border-gray-700/50">
+                <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider mb-4">
+                  Equipo Directivo
+                </h3>
+                <div className="space-y-3">
+                  {teamMembers.map((member) => (
+                    <Link
+                      key={member.slug}
+                      href={`/equipo/${member.slug}`}
+                      className="flex items-center gap-3 group p-2 -mx-2 rounded-lg hover:bg-white/5 transition-colors"
+                    >
+                      <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-800 flex-shrink-0 ring-2 ring-gray-700 group-hover:ring-violet-500/50 transition-all">
+                        <Image
+                          src={member.photo}
+                          alt={member.name}
+                          fill
+                          className="object-cover"
+                          sizes="40px"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-500 -z-10">
+                          {member.name.charAt(0)}
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-200 group-hover:text-violet-300 truncate transition-colors">
+                          {member.name}
+                        </p>
+                        <p className="text-xs text-gray-500">{member.roleLabel}</p>
+                      </div>
+                      <span className="text-xs font-semibold text-gray-600 group-hover:text-violet-400 transition-colors flex-shrink-0">
+                        {member.role}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
               </div>
             </Card>
 

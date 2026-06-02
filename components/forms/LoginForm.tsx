@@ -12,11 +12,17 @@ import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
 import toast from 'react-hot-toast'
 
+const MAX_CLIENT_ATTEMPTS = 5
+
 export function LoginForm() {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+  const [failedAttempts, setFailedAttempts] = useState(0)
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null)
+
+  const isLockedOut = lockedUntil !== null && Date.now() < lockedUntil
 
   const {
     register,
@@ -27,6 +33,8 @@ export function LoginForm() {
   })
 
   const onSubmit = async (data: LoginFormData) => {
+    if (isLockedOut) return
+
     setIsSubmitting(true)
     setError(null)
 
@@ -38,8 +46,33 @@ export function LoginForm() {
       })
 
       if (result?.error) {
-        setError('Credenciales inválidas')
-        toast.error('Error al iniciar sesión')
+        const isTooManyRequests =
+          result.error === 'TooManyRequests' ||
+          result.code === 'TooManyRequests'
+
+        const newAttempts = failedAttempts + 1
+        setFailedAttempts(newAttempts)
+
+        const isDisabled =
+          result.error === 'AccountDisabled' ||
+          result.code  === 'AccountDisabled'
+
+        if (isDisabled) {
+          setError('Tu cuenta ha sido desactivada. Contacta al administrador.')
+          toast.error('Cuenta desactivada')
+          return
+        }
+
+        if (isTooManyRequests || newAttempts >= MAX_CLIENT_ATTEMPTS) {
+          const lockMs = 30 * 60 * 1000
+          setLockedUntil(Date.now() + lockMs)
+          setError('Demasiados intentos fallidos. Por favor espera 30 minutos antes de intentar de nuevo.')
+          toast.error('Cuenta temporalmente bloqueada')
+        } else {
+          const remaining = MAX_CLIENT_ATTEMPTS - newAttempts
+          setError(`Credenciales inválidas. ${remaining} intento${remaining !== 1 ? 's' : ''} restante${remaining !== 1 ? 's' : ''}.`)
+          toast.error('Error al iniciar sesión')
+        }
         return
       }
 
@@ -96,6 +129,7 @@ export function LoginForm() {
         size="lg"
         className="w-full hover-glow"
         isLoading={isSubmitting}
+        disabled={isSubmitting || isLockedOut}
       >
         {isSubmitting ? 'Iniciando sesión...' : 'Iniciar Sesión'}
       </Button>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { MessageSquare, Edit2, Trash2, Send } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 
@@ -52,6 +52,10 @@ export function TaskComments({
 }: TaskCommentsProps) {
   const [comments, setComments] = useState<Comment[]>(initialComments)
   const [newContent, setNewContent] = useState('')
+
+  useEffect(() => {
+    setComments(initialComments)
+  }, [initialComments])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)

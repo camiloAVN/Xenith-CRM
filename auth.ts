@@ -55,6 +55,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null
         }
 
+        if (!user.isActive) {
+          console.warn(`[SECURITY] Login attempt by deactivated user: ${email}`)
+          // Reset rate limit so it doesn't accumulate while account is disabled —
+          // when the account is re-enabled the user can log in immediately.
+          resetRateLimit(`auth:${email}`)
+          throw new Error("AccountDisabled")
+        }
+
         const isPasswordValid = await compare(
           credentials.password as string,
           user.password
@@ -80,22 +88,36 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id
         token.email = user.email
         token.name = user.name
         token.picture = user.image
         token.iat = Math.floor(Date.now() / 1000)
+        token.lastActiveCheck = Math.floor(Date.now() / 1000)
       }
 
-      // Check if token is too old (absolute expiration)
+      // Check absolute expiration (24h max)
       const tokenAge = Math.floor(Date.now() / 1000) - (token.iat as number || 0)
-      const maxTokenAge = 24 * 60 * 60 // 24 hours absolute max
-
-      if (tokenAge > maxTokenAge) {
+      if (tokenAge > 24 * 60 * 60) {
         console.warn(`[SECURITY] Token expired for user: ${token.email}`)
         return { ...token, expired: true }
+      }
+
+      // Every 5 minutes, verify the user is still active in DB
+      const now = Math.floor(Date.now() / 1000)
+      const lastCheck = (token.lastActiveCheck as number) || 0
+      if (!user && token.id && now - lastCheck > 5 * 60) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { isActive: true },
+        })
+        if (!dbUser?.isActive) {
+          console.warn(`[SECURITY] Session terminated for deactivated user: ${token.email}`)
+          return { ...token, expired: true }
+        }
+        token.lastActiveCheck = now
       }
 
       return token

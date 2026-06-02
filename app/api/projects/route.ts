@@ -111,23 +111,26 @@ export async function POST(request: NextRequest) {
         notes: validatedData.notes || null,
       },
       include: {
-        client: {
-          select: {
-            id: true,
-            name: true,
-            company: true,
-            email: true,
-          },
-        },
-        assignedUser: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
+        client: { select: { id: true, name: true, company: true, email: true } },
+        assignedUser: { select: { id: true, name: true, email: true } },
       },
     })
+
+    // Crear miembros del proyecto
+    const { memberIds = [], assignedTo } = validatedData
+    // IDs únicos: líder como PROJECT_MANAGER + resto como DEVELOPER
+    const uniqueMemberIds = [...new Set(memberIds.filter((id) => id !== assignedTo))]
+    const memberRecords = [
+      { projectId: project.id, userId: assignedTo, role: 'PROJECT_MANAGER' as const },
+      ...uniqueMemberIds.map((userId) => ({
+        projectId: project.id,
+        userId,
+        role: 'DEVELOPER' as const,
+      })),
+    ]
+    if (memberRecords.length > 0) {
+      await prisma.projectMember.createMany({ data: memberRecords, skipDuplicates: true })
+    }
 
     return NextResponse.json(project, { status: 201 })
   } catch (error) {

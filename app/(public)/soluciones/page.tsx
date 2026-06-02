@@ -1,5 +1,5 @@
 import { SolutionsGrid } from '@/components/public/SolutionsGrid'
-import { ImageMosaic } from '@/components/public/ImageMosaic'
+import { ServicesCarousel } from '@/components/public/ServicesCarousel'
 import { Button } from '@/components/ui/Button'
 import { Metadata } from 'next'
 import Link from 'next/link'
@@ -31,12 +31,9 @@ export default function SolucionesPage() {
         <SolutionsGrid />
       </section>
 
-      {/* Image Mosaic */}
+      {/* Services Carousel */}
       <section className="border-t border-gray-800">
-        <ImageMosaic
-          title="Nuestros Proyectos"
-          subtitle="Una muestra de nuestro trabajo y dedicación en cada proyecto"
-        />
+        <ServicesCarousel />
       </section>
 
       {/* CTA Section */}
