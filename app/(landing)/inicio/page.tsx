@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import { teamMembers } from '@/lib/data/team'
 
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false)
@@ -293,7 +294,7 @@ export default function LandingPage() {
       <nav className={`nav${scrolled ? ' scrolled' : ''}`} id="nav">
         <div className="wrap nav__inner">
           <a href="#top" className="nav__logo" aria-label="Xenith inicio">
-            <Image src="/images/xenith-logo-new.png" alt="Xenith" width={168} height={44} priority />
+            <Image src="/images/logo.png" alt="Xenith" width={168} height={44} priority />
           </a>
           <div className="nav__links">
             <a href="#flagship">Bar Robótico</a>
@@ -611,21 +612,16 @@ export default function LandingPage() {
             <h2 className="h-section" style={{ marginTop: 16 }}>Las personas detrás<br />de la ingeniería.</h2>
           </div>
           <div className="team__grid">
-            {[
-              { slug: 'ceo', role: 'CEO', roleLabel: 'Chief Executive Officer', initial: 'C',
-                tagline: 'Visionario estratégico que lidera la transformación tecnológica de Xenith.' },
-              { slug: 'cto', role: 'CTO', roleLabel: 'Chief Technology Officer', initial: 'C',
-                tagline: 'Arquitecto de soluciones tecnológicas que define el rumbo técnico de Xenith.' },
-              { slug: 'vpe', role: 'VP Eng', roleLabel: 'VP of Engineering', initial: 'V',
-                tagline: 'Líder de ingeniería que convierte la visión técnica en sistemas robustos.' },
-            ].map((m, i) => (
+            {teamMembers.map((m, i) => (
               <div key={m.slug} className="tcard reveal" data-delay={String(i + 1)}>
                 <div className="tcard__head">
-                  <div className="tcard__avatar">{m.initial}</div>
+                  <div className="tcard__avatar">
+                    <Image src={m.photo} alt={m.name} width={64} height={64} />
+                  </div>
                   <div className="tcard__identity">
                     <span className="tcard__role">{m.role}</span>
-                    <div className="tcard__name">Nombre Apellido</div>
-                    <div className="tcard__title">{m.roleLabel}</div>
+                    <div className="tcard__name">{m.name}</div>
+                    <div className="tcard__title">{m.title}</div>
                   </div>
                 </div>
                 <div className="tcard__body">
@@ -633,14 +629,21 @@ export default function LandingPage() {
                 </div>
                 <div className="tcard__footer">
                   <div className="tcard__socials">
-                    {/* LinkedIn */}
-                    <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="tcard__social" aria-label="LinkedIn">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
-                    </a>
-                    {/* Email */}
-                    <a href="mailto:camilo.vargas@xenith.com.co" className="tcard__social" aria-label="Email">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
-                    </a>
+                    {m.social.map((s) => {
+                      const Icon = s.icon
+                      return (
+                        <a
+                          key={s.label}
+                          href={s.href}
+                          target={s.href.startsWith('http') ? '_blank' : undefined}
+                          rel={s.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                          className="tcard__social"
+                          aria-label={s.label}
+                        >
+                          <Icon size={18} strokeWidth={1.8} />
+                        </a>
+                      )
+                    })}
                   </div>
                   <Link href={`/equipo/${m.slug}`} className="tcard__link">
                     Ver perfil <span>→</span>
@@ -675,16 +678,14 @@ export default function LandingPage() {
               <div className="contact__team">
                 <p className="contact__team-label">Habla directamente con el equipo</p>
                 <div className="contact__team-btns">
-                  {[
-                    { slug: 'ceo', role: 'CEO', roleLabel: 'Chief Executive Officer', initial: 'C' },
-                    { slug: 'cto', role: 'CTO', roleLabel: 'Chief Technology Officer', initial: 'C' },
-                    { slug: 'vpe', role: 'VP Eng', roleLabel: 'VP of Engineering', initial: 'V' },
-                  ].map(m => (
+                  {teamMembers.map(m => (
                     <Link key={m.slug} href={`/equipo/${m.slug}`} className="contact__team-btn">
-                      <div className="contact__team-btn-avatar">{m.initial}</div>
+                      <div className="contact__team-btn-avatar">
+                        <Image src={m.photo} alt={m.name} width={28} height={28} />
+                      </div>
                       <div className="contact__team-btn-info">
-                        <div className="contact__team-btn-name">Nombre Apellido</div>
-                        <div className="contact__team-btn-role">{m.roleLabel}</div>
+                        <div className="contact__team-btn-name">{m.name}</div>
+                        <div className="contact__team-btn-role">{m.title}</div>
                       </div>
                       <span className="contact__team-btn-arrow">→</span>
                     </Link>
@@ -803,7 +804,7 @@ export default function LandingPage() {
         <div className="wrap">
           <div className="footer__top">
             <div className="footer__brand">
-              <Image src="/images/xenith-logo-new.png" alt="Xenith" width={168} height={44} />
+              <Image src="/images/logo.png" alt="Xenith" width={168} height={44} />
               <p>Estudio de ingeniería en robótica, software e inteligencia artificial. Experiencias que la gente recuerda.</p>
             </div>
             <div className="footer__cols">

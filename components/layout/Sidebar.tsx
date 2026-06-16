@@ -97,7 +97,7 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           <div className="flex h-16 items-center justify-between px-6 border-b border-gray-800">
             <Link href="/dashboard" className="flex items-center">
               <Image
-                src="/images/xenith-logo.png"
+                src="/images/logo.png"
                 alt="XENITH"
                 width={200}
                 height={40}

@@ -57,7 +57,7 @@ export function Footer() {
           <div className="col-span-1 sm:col-span-2 lg:col-span-2 flex flex-col items-center sm:items-start text-center sm:text-left">
             <Link href="/inicio" className="inline-flex items-center group">
               <Image
-                src="/images/xenith-logo.png"
+                src="/images/logo.png"
                 alt="XENITH"
                 width={240}
                 height={64}

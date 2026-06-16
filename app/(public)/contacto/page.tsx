@@ -16,14 +16,14 @@ export default function ContactoPage() {
     {
       icon: Mail,
       title: 'Email',
-      value: 'contacto@xenith.com',
-      link: 'mailto:contacto@xenith.com',
+      value: 'camilo.vargas@xenith.com.co',
+      link: 'mailto:camilo.vargas@xenith.com.co',
     },
     {
       icon: Phone,
       title: 'Teléfono',
-      value: '+52 (123) 456-7890',
-      link: 'tel:+521234567890',
+      value: '+57 3138863565',
+      link: 'tel:+573138863565',
     },
     {
       icon: MapPin,

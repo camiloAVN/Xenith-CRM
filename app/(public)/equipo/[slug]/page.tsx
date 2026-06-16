@@ -169,7 +169,7 @@ export default async function TeamMemberPage({ params }: Props) {
             {/* XENITH brand mark — right edge on large screens */}
             <div className="hidden lg:flex flex-col items-end justify-between self-stretch">
               <Image
-                src="/images/xenith-logo.png"
+                src="/images/logo.png"
                 alt="XENITH"
                 width={90}
                 height={24}

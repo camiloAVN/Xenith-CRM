@@ -18,7 +18,7 @@ export default function AuthLayout({
       {/* Logo */}
       <Link href="/inicio" className="absolute top-8 left-8 flex items-center group">
         <Image
-          src="/images/xenith-logo.png"
+          src="/images/logo.png"
           alt="XENITH"
           width={200}
           height={48}

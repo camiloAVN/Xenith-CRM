@@ -28,7 +28,7 @@ export function Navbar() {
           {/* Logo */}
           <Link href="/inicio" className="flex items-center group">
             <Image
-              src="/images/xenith-logo.png"
+              src="/images/logo.png"
               alt="XENITH"
               width={220}
               height={56}
