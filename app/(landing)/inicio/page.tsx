@@ -300,7 +300,7 @@ export default function LandingPage() {
             <a href="#flagship">Bar Robótico</a>
             <a href="#servicios">Servicios</a>
             <a href="#proceso">Proceso</a>
-            <a href="#galeria">Galería</a>
+            {/* <a href="#galeria">Galería</a> */}
             <a href="#nosotros">Nosotros</a>
           </div>
           <div className="nav__right">
@@ -327,7 +327,7 @@ export default function LandingPage() {
         <a href="#flagship" onClick={closeMenu}>Bar Robótico</a>
         <a href="#servicios" onClick={closeMenu}>Servicios</a>
         <a href="#proceso" onClick={closeMenu}>Proceso</a>
-        <a href="#galeria" onClick={closeMenu}>Galería</a>
+        {/* <a href="#galeria" onClick={closeMenu}>Galería</a> */}
         <a href="#nosotros" onClick={closeMenu}>Nosotros</a>
         <Link href="/login" className="nav__login" style={{ marginTop: 8 }} onClick={closeMenu}>
           Iniciar sesión
@@ -390,14 +390,14 @@ export default function LandingPage() {
               </div>
               <div className="hero__hud-label hud-br">STATUS: ONLINE</div>
               <div className="hero__scan" />
-              <div className="hero__placeholder">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2">
-                  <rect x="3" y="8" width="18" height="12" rx="2"/>
-                  <path d="M8 8V6a4 4 0 0 1 8 0v2"/>
-                  <circle cx="12" cy="14" r="2"/>
-                </svg>
-                <span>Bar Robótico</span>
-              </div>
+              <Image
+                src="/images/render_final.jpeg"
+                alt="Bar robótico Xenith"
+                fill
+                priority
+                sizes="(max-width: 980px) 460px, 42vw"
+                className="hero__img"
+              />
             </div>
           </div>
         </div>
@@ -420,14 +420,13 @@ export default function LandingPage() {
               <div className="flagship__frame hud">
                 <div className="hero__hud-label hud-tl"><span className="dot" />LIVE MIX</div>
                 <div className="hero__scan" />
-                <div className="hero__placeholder">
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2">
-                    <path d="M6 20v-6M6 14a3 3 0 0 1 3-3h2M18 4v8a2 2 0 0 1-2 2h-5"/>
-                    <circle cx="6" cy="20" r="1.5"/>
-                    <rect x="15" y="2" width="6" height="4" rx="1"/>
-                  </svg>
-                  <span>Brazo Robótico</span>
-                </div>
+                <Image
+                  src="/images/render_2.png"
+                  alt="Brazo robótico bartender Xenith"
+                  fill
+                  sizes="(max-width: 880px) 100vw, 42vw"
+                  className="hero__img"
+                />
               </div>
             </div>
             <div className="flagship__copy">
@@ -527,7 +526,8 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* GALLERY */}
+      {/* GALLERY — oculta temporalmente hasta tener fotos de eventos reales.
+          No borrar: se reactivará más adelante.
       <section className="section section--tight" id="galeria">
         <div className="wrap">
           <div className="section-head reveal">
@@ -555,6 +555,7 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+      */}
 
       {/* ABOUT */}
       <section className="section" id="nosotros">
@@ -817,7 +818,7 @@ export default function LandingPage() {
               <div className="footer__col">
                 <h5>Empresa</h5>
                 <a href="#nosotros">Nosotros</a>
-                <a href="#galeria">Galería</a>
+                {/* <a href="#galeria">Galería</a> */}
                 <a href="#contacto">Contacto</a>
               </div>
               <div className="footer__col">
