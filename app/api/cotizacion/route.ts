@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
       phone: clean(body.phone),
       company: clean(body.company),
       message: clean(body.message),
+      source: body.source === 'VECTOR' ? 'VECTOR' : 'WEB',
     })
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -104,6 +105,7 @@ export async function POST(req: NextRequest) {
         phone: data.phone ?? null,
         company: data.company ?? null,
         message: data.message ?? null,
+        source: data.source,
       },
     }),
 
@@ -111,7 +113,9 @@ export async function POST(req: NextRequest) {
       from: FROM_EMAIL,
       to: TO_EMAIL,
       replyTo: data.email,
-      subject: `[Cotización] ${data.name}${data.company ? ` — ${data.company}` : ''}`,
+      subject: `${data.source === 'VECTOR' ? '[Vector]' : '[Cotización]'} ${data.name}${
+        data.company ? ` — ${data.company}` : ''
+      }`,
       html: internalNotificationEmail(data),
     }),
 

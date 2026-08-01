@@ -1,0 +1,293 @@
+/* ============================================================
+   XENITH VECTOR — página de producto
+   Reutiliza los tokens de landing.css (definidos en .x-landing)
+   ============================================================ */
+
+/* ---------- Hero ---------- */
+.x-landing .vec-hero {
+  position: relative;
+  padding-block: clamp(120px, 18vh, 190px) clamp(60px, 8vh, 90px);
+  overflow: hidden;
+}
+.x-landing .vec-hero__bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 520px at 50% -10%, rgba(63, 224, 255, 0.1), transparent 62%),
+    radial-gradient(700px 460px at 82% 20%, var(--glow-soft), transparent 60%);
+}
+/* Rejilla técnica de fondo, se desvanece hacia abajo */
+.x-landing .vec-hero__grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(90, 160, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 160, 255, 0.055) 1px, transparent 1px);
+  background-size: 58px 58px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.85), transparent 78%);
+  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.85), transparent 78%);
+}
+.x-landing .vec-hero__inner { position: relative; z-index: 2; text-align: center; }
+
+.x-landing .vec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent-bright);
+  padding: 8px 16px;
+  border: 1px solid rgba(90, 160, 255, 0.3);
+  border-radius: 100px;
+  background: rgba(47, 128, 255, 0.09);
+}
+.x-landing .vec-badge__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-bright);
+  box-shadow: 0 0 0 0 var(--glow);
+  animation: vecPulse 2.2s infinite;
+}
+@keyframes vecPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(90, 160, 255, 0.55); }
+  70%  { box-shadow: 0 0 0 9px rgba(90, 160, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(90, 160, 255, 0); }
+}
+
+.x-landing .vec-wordmark {
+  font-family: var(--font-display);
+  font-size: clamp(52px, 10vw, 128px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  margin: 22px 0 0;
+  background: linear-gradient(170deg, #ffffff 12%, var(--accent-bright) 58%, var(--blue-deep) 105%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.x-landing .vec-hero__tagline {
+  font-family: var(--font-display);
+  font-size: clamp(19px, 2.6vw, 30px);
+  font-weight: 500;
+  color: var(--text);
+  margin-top: 6px;
+  letter-spacing: -0.015em;
+}
+.x-landing .vec-hero__lead {
+  font-size: clamp(15.5px, 1.5vw, 19px);
+  color: var(--text-dim);
+  max-width: 62ch;
+  margin: 22px auto 0;
+}
+.x-landing .vec-hero__cta {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 38px;
+}
+
+/* ---------- Cuenta regresiva ---------- */
+.x-landing .vec-count { margin-top: clamp(48px, 7vh, 78px); }
+.x-landing .vec-count__label {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 18px;
+}
+.x-landing .vec-count__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(8px, 1.4vw, 16px);
+  max-width: 620px;
+  margin: 0 auto;
+}
+.x-landing .vec-count__cell {
+  position: relative;
+  padding: clamp(16px, 2.4vw, 26px) 8px;
+  border: 1px solid var(--border-2);
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  overflow: hidden;
+}
+.x-landing .vec-count__cell::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-bright), transparent);
+  opacity: 0.55;
+}
+.x-landing .vec-count__n {
+  font-family: var(--font-display);
+  font-size: clamp(32px, 6vw, 58px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, #fff, var(--accent-bright));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.x-landing .vec-count__l {
+  font-family: var(--font-mono);
+  font-size: clamp(9.5px, 1.1vw, 11.5px);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-top: 10px;
+}
+.x-landing .vec-count__live {
+  font-family: var(--font-display);
+  font-size: clamp(26px, 4vw, 44px);
+  font-weight: 600;
+  color: var(--accent-bright);
+}
+
+/* ---------- Rejillas genéricas ---------- */
+.x-landing .vec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+.x-landing .vec-grid--3 { grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); }
+
+/* ---------- Bloque de dolor / antes-después ---------- */
+.x-landing .vec-pain {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  padding: clamp(22px, 3vw, 32px);
+}
+.x-landing .vec-pain--good { border-color: rgba(90, 160, 255, 0.28); background: linear-gradient(180deg, rgba(47, 128, 255, 0.06), var(--surface)); }
+.x-landing .vec-pain h4 {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+.x-landing .vec-pain--bad h4 { color: #ff8f9b; }
+.x-landing .vec-pain--good h4 { color: var(--accent-bright); }
+.x-landing .vec-pain li {
+  list-style: none;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 9px 0;
+  font-size: 15px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+.x-landing .vec-pain li svg { width: 17px; height: 17px; flex-shrink: 0; margin-top: 2px; stroke-width: 2; fill: none; }
+.x-landing .vec-pain--bad li svg { stroke: #ff8f9b; }
+.x-landing .vec-pain--good li svg { stroke: var(--accent-bright); }
+
+/* ---------- Hardware RFID ---------- */
+.x-landing .vec-hw {
+  position: relative;
+  padding: clamp(24px, 3vw, 32px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  transition: border-color 0.3s, transform 0.3s;
+}
+.x-landing .vec-hw:hover { border-color: var(--border-glow); transform: translateY(-4px); }
+.x-landing .vec-hw__ico {
+  width: 52px;
+  height: 52px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+  background: rgba(47, 128, 255, 0.11);
+  border: 1px solid rgba(90, 160, 255, 0.22);
+}
+.x-landing .vec-hw__ico svg { width: 24px; height: 24px; stroke: var(--accent-bright); fill: none; stroke-width: 1.6; }
+.x-landing .vec-hw h3 { font-size: 20px; margin-bottom: 9px; }
+.x-landing .vec-hw p { font-size: 14.5px; color: var(--text-dim); line-height: 1.6; }
+
+/* ---------- Pasos ---------- */
+.x-landing .vec-step {
+  position: relative;
+  padding: 26px 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.x-landing .vec-step__n {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  color: var(--accent-bright);
+  margin-bottom: 14px;
+}
+.x-landing .vec-step h4 { font-family: var(--font-display); font-size: 17.5px; font-weight: 600; margin-bottom: 8px; }
+.x-landing .vec-step p { font-size: 14px; color: var(--text-dim); line-height: 1.6; }
+
+/* ---------- Planes ---------- */
+.x-landing .vec-plan {
+  padding: 26px 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  transition: border-color 0.3s, transform 0.3s;
+}
+.x-landing .vec-plan:hover { border-color: var(--border-glow); transform: translateY(-3px); }
+.x-landing .vec-plan--featured {
+  border-color: rgba(90, 160, 255, 0.35);
+  background: linear-gradient(180deg, rgba(47, 128, 255, 0.08), var(--surface));
+}
+.x-landing .vec-plan__name {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.x-landing .vec-plan__for {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 16px;
+}
+.x-landing .vec-plan p { font-size: 14px; color: var(--text-dim); line-height: 1.6; }
+
+/* ---------- CTA final / formulario ---------- */
+.x-landing .vec-cta {
+  border: 1px solid rgba(90, 160, 255, 0.24);
+  border-radius: 22px;
+  background:
+    radial-gradient(700px 320px at 50% 0%, rgba(47, 128, 255, 0.14), transparent 65%),
+    var(--surface);
+  padding: clamp(32px, 5vw, 60px);
+  text-align: center;
+}
+.x-landing .vec-form { max-width: 540px; margin: 30px auto 0; text-align: left; }
+.x-landing .vec-form__note {
+  font-size: 12.5px;
+  color: var(--text-faint);
+  text-align: center;
+  margin-top: 14px;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 560px) {
+  .x-landing .vec-count__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 340px; }
+  .x-landing .vec-hero__cta .btn { width: 100%; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .x-landing .vec-badge__dot { animation: none; }
+}

@@ -306,6 +306,7 @@ export default function LandingPage() {
             <a href="#proceso">Proceso</a>
             {/* <a href="#galeria">Galería</a> */}
             <a href="#nosotros">Nosotros</a>
+            <Link href="/vector" className="accent-text">Vector</Link>
           </div>
           <div className="nav__right">
             <Link href="/login" className="nav__login">
@@ -333,6 +334,7 @@ export default function LandingPage() {
         <a href="#proceso" onClick={closeMenu}>Proceso</a>
         {/* <a href="#galeria" onClick={closeMenu}>Galería</a> */}
         <a href="#nosotros" onClick={closeMenu}>Nosotros</a>
+        <Link href="/vector" className="accent-text" onClick={closeMenu}>Vector</Link>
         <Link href="/login" className="nav__login" style={{ marginTop: 8 }} onClick={closeMenu}>
           Iniciar sesión
         </Link>
