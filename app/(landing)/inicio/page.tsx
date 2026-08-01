@@ -607,7 +607,9 @@ export default function LandingPage() {
                 <div className="l">Soporte en sitio</div>
               </div>
               <div className="stat">
-                <div className="n" data-text="∞">0</div>
+                {/* Literal, no animado: el contador solo procesa [data-count],
+                    así que el data-text que había aquí nunca se aplicaba. */}
+                <div className="n">∞</div>
                 <div className="l">Ideas por construir</div>
               </div>
             </div>
