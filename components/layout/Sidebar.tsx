@@ -14,6 +14,7 @@ import {
   Shield,
   CircleUser,
   TrendingUp,
+  Inbox,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { Button } from '@/components/ui/Button'
@@ -41,6 +42,11 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       name: 'Proyectos',
       href: '/dashboard/proyectos',
       icon: FolderKanban,
+    },
+    {
+      name: 'Leads',
+      href: '/dashboard/leads',
+      icon: Inbox,
     },
     {
       name: 'Clientes',

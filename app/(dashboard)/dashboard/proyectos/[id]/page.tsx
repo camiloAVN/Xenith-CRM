@@ -103,10 +103,12 @@ export default function ProjectDetailPage({
   // Fetch project and initial data
   const loadProject = useCallback(async () => {
     try {
+      // forSelect=true: la ruta sin el flag exige SUPERADMIN, y sin la lista
+      // de usuarios los desplegables de asignación de tareas quedan vacíos.
       const [projectRes, progressRes, usersRes] = await Promise.all([
         fetch(`/api/v1/projects/${id}`),
         fetch(`/api/v1/projects/${id}/progress`),
-        fetch('/api/users'),
+        fetch('/api/users?forSelect=true'),
       ])
 
       if (projectRes.ok) setProject(await projectRes.json())

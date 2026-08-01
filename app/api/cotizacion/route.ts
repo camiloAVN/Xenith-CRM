@@ -1,133 +1,137 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { z } from 'zod'
+import { prisma } from '@/lib/db/prisma'
+import { cotizacionSchema } from '@/lib/validations/cotizacion'
+import { internalNotificationEmail, thankYouEmail } from '@/lib/email/templates'
+import { checkRateLimit } from '@/lib/security/rate-limiter'
+import { getClientIP } from '@/lib/security/get-client-ip'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
-const TO_EMAIL = 'camilo.vargas@xenith.com.co'
-const FROM_EMAIL = 'Xenith Web <onboarding@resend.dev>'
+const TO_EMAIL = process.env.CONTACT_TO_EMAIL || 'camilo.vargas@xenith.com.co'
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'Xenith <contacto@xenith.com.co>'
 
-const cotizacionSchema = z.object({
-  name: z.string().min(2, 'Nombre muy corto').max(100),
-  email: z.string().email('Email inválido').max(100),
-  company: z.string().max(100).optional(),
-  type: z.string().min(1, 'Selecciona un tipo de proyecto'),
-  message: z.string().min(5, 'Mensaje muy corto').max(3000),
-})
+/**
+ * Límite por IP. Es un backstop contra inundaciones, NO una cuota por persona:
+ * en una feria todos los asistentes comparten la IP del wifi del recinto, así
+ * que va deliberadamente alto para no bloquear leads reales. Configurable por
+ * entorno para poder subirlo aún más esos días sin tocar código.
+ */
+const RATE_LIMIT = {
+  maxAttempts: Number(process.env.CONTACT_RATE_LIMIT_MAX) || 20,
+  windowMs: (Number(process.env.CONTACT_RATE_LIMIT_WINDOW_MIN) || 60) * 60 * 1000,
+}
+
+/**
+ * Ventana anti-duplicados por correo. Cubre el doble clic y el reenvío
+ * accidental. No es un bloqueo permanente a propósito: un cliente que escribió
+ * hace meses tiene todo el derecho a volver a consultar por otro proyecto.
+ */
+const EMAIL_COOLDOWN_MS =
+  (Number(process.env.CONTACT_EMAIL_COOLDOWN_MIN) || 10) * 60 * 1000
+
+/** Convierte '' en undefined para no guardar cadenas vacías en la DB. */
+const clean = (v: unknown) =>
+  typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined
 
 export async function POST(req: NextRequest) {
+  // Se comprueba antes de parsear el cuerpo: una petición bloqueada no debe
+  // costar ni trabajo de validación ni una escritura en la base.
+  const ip = getClientIP(req)
+  const limit = checkRateLimit(`cotizacion:${ip}`, RATE_LIMIT)
+
+  if (!limit.success) {
+    const retryAfter = Math.max(1, Math.ceil((limit.resetTime - Date.now()) / 1000))
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'Ya recibimos varias solicitudes tuyas. Espera un momento o escríbenos directamente a ' + TO_EMAIL + '.',
+      },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+    )
+  }
+
+  let data
+
   try {
     const body = await req.json()
-    const data = cotizacionSchema.parse(body)
-
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: TO_EMAIL,
-      replyTo: data.email,
-      subject: `[Cotización] ${data.type} — ${data.name}`,
-      html: `
-<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 16px;">
-    <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-
-        <!-- Header -->
-        <tr><td style="background:#05070e;border-radius:16px 16px 0 0;padding:32px 40px;text-align:center;">
-          <p style="margin:0;font-family:monospace;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:#5aa0ff;margin-bottom:10px;">
-            XENITH · ENGINEERING STUDIO
-          </p>
-          <h1 style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.02em;">
-            Nueva solicitud de cotización
-          </h1>
-        </td></tr>
-
-        <!-- Tipo de proyecto badge -->
-        <tr><td style="background:#070a13;padding:20px 40px;border-left:1px solid rgba(90,160,255,0.15);border-right:1px solid rgba(90,160,255,0.15);">
-          <table width="100%" cellpadding="0" cellspacing="0">
-            <tr>
-              <td style="padding:12px 18px;background:rgba(47,128,255,0.12);border:1px solid rgba(90,160,255,0.3);border-radius:10px;text-align:center;">
-                <p style="margin:0;font-family:monospace;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#5aa0ff;margin-bottom:4px;">Tipo de proyecto</p>
-                <p style="margin:0;font-size:17px;font-weight:700;color:#ffffff;">${data.type}</p>
-              </td>
-            </tr>
-          </table>
-        </td></tr>
-
-        <!-- Datos del contacto -->
-        <tr><td style="background:#070a13;padding:8px 40px 24px;border-left:1px solid rgba(90,160,255,0.15);border-right:1px solid rgba(90,160,255,0.15);">
-          <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid rgba(255,255,255,0.07);border-radius:12px;overflow:hidden;">
-
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
-              <td style="padding:14px 18px;background:rgba(255,255,255,0.03);width:120px;">
-                <p style="margin:0;font-family:monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#5d6883;">Nombre</p>
-              </td>
-              <td style="padding:14px 18px;background:rgba(255,255,255,0.01);">
-                <p style="margin:0;font-size:15px;color:#eef2fb;font-weight:600;">${data.name}</p>
-              </td>
-            </tr>
-
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
-              <td style="padding:14px 18px;background:rgba(255,255,255,0.03);">
-                <p style="margin:0;font-family:monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#5d6883;">Email</p>
-              </td>
-              <td style="padding:14px 18px;background:rgba(255,255,255,0.01);">
-                <a href="mailto:${data.email}" style="color:#5aa0ff;font-size:15px;text-decoration:none;">${data.email}</a>
-              </td>
-            </tr>
-
-            ${data.company ? `
-            <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
-              <td style="padding:14px 18px;background:rgba(255,255,255,0.03);">
-                <p style="margin:0;font-family:monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:#5d6883;">Empresa</p>
-              </td>
-              <td style="padding:14px 18px;background:rgba(255,255,255,0.01);">
-                <p style="margin:0;font-size:15px;color:#eef2fb;">${data.company}</p>
-              </td>
-            </tr>` : ''}
-
-          </table>
-        </td></tr>
-
-        <!-- Mensaje -->
-        <tr><td style="background:#070a13;padding:0 40px 32px;border-left:1px solid rgba(90,160,255,0.15);border-right:1px solid rgba(90,160,255,0.15);">
-          <p style="margin:0 0 10px;font-family:monospace;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#5d6883;">Mensaje</p>
-          <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:18px 20px;">
-            <p style="margin:0;font-size:15px;color:#97a3bb;line-height:1.7;white-space:pre-wrap;">${data.message}</p>
-          </div>
-        </td></tr>
-
-        <!-- CTA -->
-        <tr><td style="background:#070a13;padding:0 40px 32px;text-align:center;border-left:1px solid rgba(90,160,255,0.15);border-right:1px solid rgba(90,160,255,0.15);">
-          <a href="mailto:${data.email}?subject=Re: Cotización ${encodeURIComponent(data.type)}"
-             style="display:inline-block;background:linear-gradient(180deg,#5aa0ff,#2f80ff);color:#ffffff;font-size:14px;font-weight:600;padding:13px 28px;border-radius:10px;text-decoration:none;letter-spacing:0.01em;">
-            Responder a ${data.name} →
-          </a>
-        </td></tr>
-
-        <!-- Footer -->
-        <tr><td style="background:#05070e;border-radius:0 0 16px 16px;padding:20px 40px;border-top:1px solid rgba(255,255,255,0.05);border:1px solid rgba(90,160,255,0.12);">
-          <p style="margin:0;font-family:monospace;font-size:11px;color:#5d6883;text-align:center;">
-            xenith.com.co · Bogotá, Colombia
-          </p>
-        </td></tr>
-
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>
-      `,
+    data = cotizacionSchema.parse({
+      name: clean(body.name),
+      // En minúsculas para que la deduplicación no dependa de cómo lo escriban.
+      email: clean(body.email)?.toLowerCase(),
+      phone: clean(body.phone),
+      company: clean(body.company),
+      message: clean(body.message),
     })
-
-    return NextResponse.json({ ok: true })
   } catch (err) {
     if (err instanceof z.ZodError) {
       return NextResponse.json({ ok: false, error: 'Datos inválidos' }, { status: 400 })
     }
-    console.error('[cotizacion]', err)
+    return NextResponse.json({ ok: false, error: 'Solicitud malformada' }, { status: 400 })
+  }
+
+  // Anti-duplicados por correo. A diferencia del límite por IP (que vive en
+  // memoria y se reinicia con cada instancia serverless), esto consulta la base
+  // y por tanto es confiable en Vercel.
+  try {
+    const reciente = await prisma.contactRequest.findFirst({
+      where: {
+        email: data.email,
+        createdAt: { gte: new Date(Date.now() - EMAIL_COOLDOWN_MS) },
+      },
+      select: { id: true },
+    })
+
+    // Idempotente: casi siempre es un doble clic. Se le muestra éxito —porque
+    // su solicitud sí está registrada— pero no duplicamos fila ni correos.
+    if (reciente) {
+      return NextResponse.json({ ok: true, duplicate: true })
+    }
+  } catch (err) {
+    // Si la consulta falla, seguimos adelante: es preferible un duplicado
+    // ocasional a perder el lead.
+    console.error('[cotizacion] chequeo de duplicado:', err)
+  }
+
+  // Las tres operaciones son independientes: si una falla, las otras deben
+  // completarse igual. Perder un lead por un fallo de correo no es aceptable.
+  const [saved, notified, thanked] = await Promise.allSettled([
+    prisma.contactRequest.create({
+      data: {
+        name: data.name,
+        email: data.email,
+        phone: data.phone ?? null,
+        company: data.company ?? null,
+        message: data.message ?? null,
+      },
+    }),
+
+    resend.emails.send({
+      from: FROM_EMAIL,
+      to: TO_EMAIL,
+      replyTo: data.email,
+      subject: `[Cotización] ${data.name}${data.company ? ` — ${data.company}` : ''}`,
+      html: internalNotificationEmail(data),
+    }),
+
+    resend.emails.send({
+      from: FROM_EMAIL,
+      to: data.email,
+      replyTo: TO_EMAIL,
+      subject: 'Gracias por contactarnos — Xenith',
+      html: thankYouEmail(data),
+    }),
+  ])
+
+  if (saved.status === 'rejected') console.error('[cotizacion] DB:', saved.reason)
+  if (notified.status === 'rejected') console.error('[cotizacion] aviso interno:', notified.reason)
+  if (thanked.status === 'rejected') console.error('[cotizacion] agradecimiento:', thanked.reason)
+
+  // Solo es un error real si no quedó rastro alguno de la solicitud.
+  if (saved.status === 'rejected' && notified.status === 'rejected') {
     return NextResponse.json({ ok: false, error: 'Error al enviar' }, { status: 500 })
   }
+
+  return NextResponse.json({ ok: true })
 }

@@ -235,11 +235,11 @@ export default function LandingPage() {
   }, [])
 
   /* --- Contact form --- */
+  // Solo nombre y correo son obligatorios; teléfono y mensaje son opcionales.
   const validators: Record<string, (v: string) => boolean> = {
     name: v => v.trim().length >= 2,
     email: v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()),
-    type: v => v.trim() !== '',
-    message: v => v.trim().length >= 5,
+    phone: v => v.trim() === '' || /^[\d\s\-+()]+$/.test(v.trim()),
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -247,7 +247,7 @@ export default function LandingPage() {
     const form = e.currentTarget
     const errors: Record<string, boolean> = {}
     let ok = true
-    ;['name', 'email', 'type', 'message'].forEach(n => {
+    ;['name', 'email', 'phone'].forEach(n => {
       const input = form.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(`[name="${n}"]`)
       if (input && !validators[n]?.(input.value)) {
         errors[n] = true
@@ -269,15 +269,19 @@ export default function LandingPage() {
         body: JSON.stringify({
           name: getValue('name'),
           email: getValue('email'),
+          phone: getValue('phone') || undefined,
           company: getValue('company') || undefined,
-          type: getValue('type'),
-          message: getValue('message'),
+          message: getValue('message') || undefined,
         }),
       })
       if (res.ok) {
         setFormSuccess(true)
       } else {
-        setFormApiError('No se pudo enviar. Intenta de nuevo o escríbenos directamente.')
+        // El servidor manda un motivo útil en 429 (rate limit); si no, genérico.
+        const body = await res.json().catch(() => null)
+        setFormApiError(
+          body?.error || 'No se pudo enviar. Intenta de nuevo o escríbenos directamente.'
+        )
       }
     } catch {
       setFormApiError('Error de red. Intenta de nuevo.')
@@ -716,26 +720,16 @@ export default function LandingPage() {
                       <label htmlFor="f-company">Empresa</label>
                       <input id="f-company" name="company" type="text" placeholder="Nombre de tu empresa" />
                     </div>
-                    <div className={`field${formErrors.type ? ' invalid' : ''}`}>
-                      <label htmlFor="f-type">Tipo de proyecto</label>
-                      <select id="f-type" name="type" required defaultValue=""
-                        onChange={() => setFormErrors(e => ({ ...e, type: false }))}>
-                        <option value="" disabled>Selecciona…</option>
-                        <option>Bar robótico para evento</option>
-                        <option>Experiencia / activación de marca</option>
-                        <option>Software a la medida</option>
-                        <option>Inteligencia artificial</option>
-                        <option>Robótica / automatización</option>
-                        <option>Otro</option>
-                      </select>
-                      <span className="err">Selecciona una opción.</span>
+                    <div className={`field${formErrors.phone ? ' invalid' : ''}`}>
+                      <label htmlFor="f-phone">Teléfono</label>
+                      <input id="f-phone" name="phone" type="tel" placeholder="+57 300 123 4567"
+                        onChange={() => setFormErrors(e => ({ ...e, phone: false }))} />
+                      <span className="err">Ingresa un teléfono válido.</span>
                     </div>
                   </div>
-                  <div className={`field${formErrors.message ? ' invalid' : ''}`}>
+                  <div className="field">
                     <label htmlFor="f-msg">Mensaje</label>
-                    <textarea id="f-msg" name="message" placeholder="Cuéntanos sobre tu evento o proyecto…" required
-                      onChange={() => setFormErrors(e => ({ ...e, message: false }))} />
-                    <span className="err">Escribe un mensaje.</span>
+                    <textarea id="f-msg" name="message" placeholder="Cuéntanos sobre tu evento o proyecto…" />
                   </div>
                   {formApiError && (
                     <p style={{ color: '#ff7a86', fontSize: 13, margin: '0 0 4px' }}>{formApiError}</p>
