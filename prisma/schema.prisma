@@ -292,6 +292,27 @@ model QuotationItem {
   @@map("quotation_items")
 }
 
+// Solicitudes del formulario público de cotización
+model ContactRequest {
+  id        String     @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  company   String?
+  message   String?    @db.Text
+  status    LeadStatus @default(NEW)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Sin @unique en email: una misma persona puede escribir varias veces
+  // y un choque de constraint significaría perder un lead. La deduplicación
+  // es por ventana de tiempo y se apoya en el índice compuesto de abajo.
+  @@index([email, createdAt])
+  @@index([status])
+  @@index([createdAt])
+  @@map("contact_requests")
+}
+
 // Earnings model
 model Earning {
   id          String      @id @default(cuid())
@@ -360,4 +381,12 @@ enum ProjectRole {
   PROJECT_MANAGER
   DEVELOPER
   VIEWER
+}
+
+enum LeadStatus {
+  NEW       // Recién recibido
+  CONTACTED // Ya se le respondió
+  QUALIFIED // Prospecto real
+  CONVERTED // Se volvió cliente
+  DISCARDED // Descartado
 }
