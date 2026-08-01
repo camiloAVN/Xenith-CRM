@@ -31,6 +31,9 @@ export const cotizacionSchema = z.object({
     .string()
     .max(3000, 'El mensaje no puede exceder 3000 caracteres')
     .optional(),
+
+  // Qué formulario originó la solicitud. Por defecto el general de la web.
+  source: z.enum(['WEB', 'VECTOR']).default('WEB'),
 })
 
 export type CotizacionFormData = z.infer<typeof cotizacionSchema>

@@ -301,6 +301,8 @@ model ContactRequest {
   company   String?
   message   String?    @db.Text
   status    LeadStatus @default(NEW)
+  // De qué formulario vino: el general de la web o la landing de Vector.
+  source    LeadSource @default(WEB)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
@@ -381,6 +383,11 @@ enum ProjectRole {
   PROJECT_MANAGER
   DEVELOPER
   VIEWER
+}
+
+enum LeadSource {
+  WEB    // Formulario general de /inicio
+  VECTOR // Landing de Xenith Vector
 }
 
 enum LeadStatus {

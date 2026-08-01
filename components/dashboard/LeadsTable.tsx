@@ -92,10 +92,17 @@ export function LeadsTable({ leads, onStatusChange, onDelete }: LeadsTableProps)
                   </td>
 
                   <td className="font-medium whitespace-nowrap">
-                    {lead.name}
-                    {lead.status === 'NEW' && (
-                      <span className="ml-2 inline-block w-1.5 h-1.5 rounded-full bg-violet-400 align-middle" />
-                    )}
+                    <div className="flex items-center gap-2">
+                      <span>{lead.name}</span>
+                      {lead.status === 'NEW' && (
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-violet-400" />
+                      )}
+                      {lead.source === 'VECTOR' && (
+                        <Badge variant="info" className="font-mono text-[10px]">
+                          VECTOR
+                        </Badge>
+                      )}
+                    </div>
                   </td>
 
                   <td>
