@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils/cn'
 import { format } from 'date-fns'
 import { X, Users, UserPlus } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 interface UserOption {
   id: string
@@ -70,14 +71,24 @@ export function ProjectForm({
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // forSelect=true devuelve solo id/name/email de usuarios activos y está
+        // disponible para cualquier sesión. Sin este flag la ruta exige
+        // SUPERADMIN y un ADMIN se quedaba sin lista de líderes.
         const [clientsRes, usersRes] = await Promise.all([
           fetch('/api/clients'),
-          fetch('/api/users'),
+          fetch('/api/users?forSelect=true'),
         ])
         if (clientsRes.ok) setClients(await clientsRes.json())
-        if (usersRes.ok) setUsers(await usersRes.json())
+        if (usersRes.ok) {
+          setUsers(await usersRes.json())
+        } else {
+          // Un fallo silencioso aquí deja el formulario inservible sin avisar.
+          console.error('Error al cargar usuarios:', usersRes.status)
+          toast.error('No se pudo cargar la lista de usuarios')
+        }
       } catch (error) {
         console.error('Error fetching data:', error)
+        toast.error('No se pudieron cargar los datos del formulario')
       } finally {
         setLoadingData(false)
       }
