@@ -12,7 +12,7 @@ import {
   LEAD_STATUSES,
   LEAD_STATUS_LABELS,
 } from '@/lib/validations/lead'
-import { Search, RefreshCw, Inbox } from 'lucide-react'
+import { Search, RefreshCw, Inbox, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 type Filter = LeadStatus | 'ALL'
@@ -25,6 +25,7 @@ export default function LeadsPage() {
   const [filter, setFilter] = useState<Filter>('ALL')
   const [search, setSearch] = useState('')
   const [localSearch, setLocalSearch] = useState('')
+  const [isExporting, setIsExporting] = useState(false)
 
   const fetchLeads = useCallback(async () => {
     setIsLoading(true)
@@ -71,6 +72,34 @@ export default function LeadsPage() {
     }
   }
 
+  const handleExport = async () => {
+    setIsExporting(true)
+    try {
+      const params = new URLSearchParams()
+      if (search) params.set('search', search)
+      if (filter !== 'ALL') params.set('status', filter)
+
+      const res = await fetch(`/api/leads/export?${params.toString()}`)
+      if (!res.ok) throw new Error('export failed')
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `Leads-Xenith-${new Date().toISOString().slice(0, 10)}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+
+      toast.success('Excel descargado')
+    } catch {
+      toast.error('No se pudo generar el Excel')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   const handleDelete = async (id: string) => {
     try {
       const res = await fetch(`/api/leads/${id}`, { method: 'DELETE' })
@@ -103,10 +132,20 @@ export default function LeadsPage() {
             Solicitudes recibidas desde el formulario de la web
           </p>
         </div>
-        <Button variant="outline" onClick={fetchLeads} disabled={isLoading}>
-          <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
-          Actualizar
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleExport}
+            disabled={isExporting || isLoading || total === 0}
+          >
+            <Download className={cn('w-4 h-4 mr-2', isExporting && 'animate-pulse')} />
+            {isExporting ? 'Generando...' : 'Descargar Excel'}
+          </Button>
+          <Button variant="outline" onClick={fetchLeads} disabled={isLoading}>
+            <RefreshCw className={cn('w-4 h-4 mr-2', isLoading && 'animate-spin')} />
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       <Card>
