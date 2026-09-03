@@ -6,7 +6,7 @@ const SITE_URL =
 
 const title = 'Xenith Vector — Inventario RFID y CRM para empresas audiovisuales'
 const description =
-  'Inventario, CRM, cotizaciones, proyectos y calendario en una sola plataforma. Con lectores, antenas y tags RFID para que tu bodega se cuente sola. Lanzamiento: 1 de septiembre.'
+  'Inventario, CRM, cotizaciones, proyectos y calendario en una sola plataforma. Con lectores, antenas y tags RFID para que tu bodega se cuente sola. Lanzamiento: 25 de septiembre.'
 
 export const metadata: Metadata = {
   title,

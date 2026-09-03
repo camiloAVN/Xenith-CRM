@@ -5,8 +5,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import './vector.css'
 
-/** Lanzamiento: 1 de septiembre de 2026, medianoche hora de Colombia (UTC-5). */
-const LAUNCH_DATE = new Date('2026-09-01T00:00:00-05:00')
+/** Lanzamiento: 25 de septiembre de 2026, medianoche hora de Colombia (UTC-5). */
+const LAUNCH_DATE = new Date('2026-09-25T00:00:00-05:00')
 
 interface TimeLeft {
   days: number
@@ -202,7 +202,7 @@ export default function VectorPage() {
         <div className="wrap vec-hero__inner">
           <span className="vec-badge">
             <span className="vec-badge__dot" />
-            En desarrollo · Lanza el 1 de septiembre
+            En desarrollo · Lanza el 25 de septiembre
           </span>
 
           <h1 className="vec-wordmark">VECTOR</h1>

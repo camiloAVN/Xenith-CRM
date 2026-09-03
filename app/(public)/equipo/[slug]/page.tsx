@@ -172,7 +172,7 @@ export default async function TeamMemberPage({ params }: Props) {
                 src="/images/logo.png"
                 alt="XENITH"
                 width={90}
-                height={24}
+                height={30}
                 className="opacity-30 invert"
               />
               <p className="text-[10px] font-mono text-gray-600 uppercase tracking-[0.2em] rotate-90 origin-bottom-right mb-4 mr-1 translate-y-2 whitespace-nowrap">
