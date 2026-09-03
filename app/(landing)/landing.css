@@ -79,8 +79,8 @@
 /* ---------- Layout helpers ---------- */
 .x-landing .wrap { max-width: var(--maxw); margin: 0 auto; padding-inline: var(--pad); position: relative; z-index: 2; }
 .x-landing .section { padding-block: clamp(80px, 12vh, 160px); position: relative; z-index: 2; }
-/* El nav es fixed (72px): sin esto los anclajes quedan tapados al aterrizar. */
-.x-landing section[id] { scroll-margin-top: 84px; }
+/* El nav es fixed (84px): sin esto los anclajes quedan tapados al aterrizar. */
+.x-landing section[id] { scroll-margin-top: 96px; }
 .x-landing .section--tight { padding-block: clamp(56px, 8vh, 100px); }
 
 /* ---------- Typography ---------- */
@@ -196,9 +196,9 @@
   backdrop-filter: blur(16px) saturate(140%);
   border-bottom-color: var(--border);
 }
-.x-landing .nav__inner { display: flex; align-items: center; justify-content: space-between; height: 72px; }
+.x-landing .nav__inner { display: flex; align-items: center; justify-content: space-between; height: 84px; }
 .x-landing .nav__logo { display: flex; align-items: center; gap: 0; }
-.x-landing .nav__logo img { height: 42px; width: auto; }
+.x-landing .nav__logo img { height: 58px; width: auto; }
 .x-landing .nav__links { display: flex; align-items: center; gap: 6px; }
 .x-landing .nav__links a {
   font-size: 14.5px; color: var(--text-dim);
@@ -228,7 +228,7 @@
 
 /* Mobile menu */
 .x-landing .mobile-menu {
-  position: fixed; inset: 72px 0 0 0; z-index: 99;
+  position: fixed; inset: 84px 0 0 0; z-index: 99;
   background: rgba(5,7,14,.97); backdrop-filter: blur(20px);
   display: flex; flex-direction: column; padding: var(--pad);
   gap: 4px;
@@ -247,7 +247,7 @@
 /* ============================================================
    HERO
    ============================================================ */
-.x-landing .hero { position: relative; min-height: 100svh; display: flex; align-items: center; padding-top: 110px; padding-bottom: 60px; overflow: hidden; }
+.x-landing .hero { position: relative; min-height: 100svh; display: flex; align-items: center; padding-top: 122px; padding-bottom: 60px; overflow: hidden; }
 .x-landing .hero__bg { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .x-landing .hero__grid {
   position: absolute; inset: -2px;

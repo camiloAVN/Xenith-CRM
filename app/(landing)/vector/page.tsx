@@ -159,7 +159,7 @@ export default function VectorPage() {
       <nav className={`nav${scrolled ? ' scrolled' : ''}`}>
         <div className="wrap nav__inner">
           <Link href="/inicio" className="nav__logo" aria-label="Xenith inicio">
-            <Image src="/images/logo.png" alt="Xenith" width={168} height={44} priority />
+            <Image src="/images/logo.png" alt="Xenith" width={174} height={58} priority />
           </Link>
           <div className="nav__links">
             <a href="#problema">Por qué</a>

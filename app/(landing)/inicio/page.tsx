@@ -298,7 +298,7 @@ export default function LandingPage() {
       <nav className={`nav${scrolled ? ' scrolled' : ''}`} id="nav">
         <div className="wrap nav__inner">
           <a href="#top" className="nav__logo" aria-label="Xenith inicio">
-            <Image src="/images/logo.png" alt="Xenith" width={168} height={44} priority />
+            <Image src="/images/logo.png" alt="Xenith" width={174} height={58} priority />
           </a>
           <div className="nav__links">
             <a href="#flagship">Bar Robótico</a>
