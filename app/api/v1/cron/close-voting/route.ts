@@ -4,8 +4,13 @@ import { taskValuationService } from '@/lib/services/task-valuation.service'
 /**
  * Cierre programado de ventanas de votación vencidas.
  *
+ * ATENCION: hoy NO hay ningún cron programado que llame esta ruta. El cierre
+ * perezoso (al abrir el tablero de un proyecto) cubre la operación; esto queda
+ * listo para engancharse cuando se decida la plataforma.
+ *
  * Portable entre plataformas a propósito:
- *  - Vercel Cron llama esta URL y manda `Authorization: Bearer $CRON_SECRET`.
+ *  - Vercel Cron llamaría esta URL mandando `Authorization: Bearer $CRON_SECRET`
+ *    (se declara en vercel.json; el plan Hobby solo admite una corrida diaria).
  *  - Railway (o cualquier cron de sistema) puede llamarla igual con ese header,
  *    o saltarse el HTTP y correr `npm run cron:tick`, que ejecuta el MISMO
  *    servicio en proceso. La lógica vive en el servicio, no aquí.

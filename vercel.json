@@ -5,11 +5,5 @@
   "outputDirectory": ".next",
   "regions": [
     "iad1"
-  ],
-  "crons": [
-    {
-      "path": "/api/v1/cron/close-voting",
-      "schedule": "0 * * * *"
-    }
   ]
 }
