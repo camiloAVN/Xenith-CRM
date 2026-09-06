@@ -1,7 +1,9 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useProjects } from '@/hooks/useProjects'
+import { usePermissions } from '@/hooks/usePermissions'
 import { ProjectForm } from '@/components/forms/ProjectForm'
 import { Card } from '@/components/ui/Card'
 import { ProjectFormData } from '@/lib/validations/project'
@@ -11,6 +13,15 @@ import Link from 'next/link'
 export default function NewProjectPage() {
   const router = useRouter()
   const { createProject, isLoading } = useProjects()
+  const { canCreateProjects, isLoading: loadingPermissions } = usePermissions()
+
+  // El servidor ya rechaza el POST; esto solo evita mostrar un formulario
+  // que no se va a poder enviar.
+  useEffect(() => {
+    if (!loadingPermissions && !canCreateProjects) {
+      router.replace('/dashboard/proyectos')
+    }
+  }, [loadingPermissions, canCreateProjects, router])
 
   const handleSubmit = async (data: ProjectFormData) => {
     const project = await createProject(data)
@@ -21,6 +32,14 @@ export default function NewProjectPage() {
 
   const handleCancel = () => {
     router.push('/dashboard/proyectos')
+  }
+
+  if (loadingPermissions || !canCreateProjects) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="inline-block w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
   }
 
   return (

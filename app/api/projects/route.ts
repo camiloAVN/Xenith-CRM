@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/db/prisma'
 import { projectSchema } from '@/lib/validations/project'
+import { canCreateProjects } from '@/lib/auth/permissions'
 import { ZodError } from 'zod'
 import { Decimal } from '@prisma/client/runtime/library'
 
@@ -90,6 +91,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Solo el dueno (SUPERADMIN) o quien tenga el permiso explicito que el
+    // dueno otorga desde /dashboard/usuarios puede crear proyectos.
+    if (!(await canCreateProjects(session.user.id as string))) {
+      return NextResponse.json(
+        { error: 'No tienes permiso para crear proyectos' },
+        { status: 403 }
+      )
+    }
+
     const body = await request.json()
     const validatedData = projectSchema.parse(body)
 
@@ -101,7 +111,7 @@ export async function POST(request: NextRequest) {
         title: validatedData.title,
         description: validatedData.description,
         status: validatedData.status,
-        clientId: validatedData.clientId,
+        clientId: validatedData.clientId || null,
         assignedTo: validatedData.assignedTo,
         priority: validatedData.priority,
         startDate: validatedData.startDate ? new Date(validatedData.startDate) : null,

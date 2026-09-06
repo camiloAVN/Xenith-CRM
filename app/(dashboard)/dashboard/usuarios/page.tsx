@@ -16,6 +16,7 @@ import {
   UserX,
   Shield,
   X,
+  FolderPlus,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -43,6 +44,7 @@ export default function UsersPage() {
     password: '',
     role: 'USER' as UserRole,
     position: '',
+    canCreateProjects: false,
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -99,6 +101,7 @@ export default function UsersPage() {
             email: formData.email,
             role: formData.role,
             position: formData.position || null,
+            canCreateProjects: formData.canCreateProjects,
             ...(formData.password && { password: formData.password }),
           }
         : { ...formData, position: formData.position || null }
@@ -176,6 +179,7 @@ export default function UsersPage() {
       password: '',
       role: user.role,
       position: user.position || '',
+      canCreateProjects: user.canCreateProjects,
     })
     setShowModal(true)
   }
@@ -187,6 +191,7 @@ export default function UsersPage() {
       password: '',
       role: 'USER',
       position: '',
+      canCreateProjects: false,
     })
     setEditingUser(null)
   }
@@ -244,6 +249,7 @@ export default function UsersPage() {
                     <th>Email</th>
                     <th>Cargo</th>
                     <th>Rol</th>
+                    <th>Proyectos</th>
                     <th>Estado</th>
                     <th>Creado</th>
                     <th>Acciones</th>
@@ -270,6 +276,19 @@ export default function UsersPage() {
                         >
                           {roleLabels[user.role]}
                         </span>
+                      </td>
+                      <td>
+                        {user.email === SUPERADMIN_EMAIL || user.canCreateProjects ? (
+                          <span
+                            className="inline-flex items-center gap-1 text-violet-400"
+                            title="Puede crear proyectos"
+                          >
+                            <FolderPlus className="w-4 h-4" />
+                            Puede crear
+                          </span>
+                        ) : (
+                          <span className="text-gray-600">—</span>
+                        )}
                       </td>
                       <td>
                         {user.isActive ? (
@@ -395,6 +414,28 @@ export default function UsersPage() {
                   setFormData({ ...formData, role: e.target.value as UserRole })
                 }
               />
+
+              {/* Permiso que solo el dueno puede otorgar. Esta pagina ya es
+                  exclusiva del superadmin, asi que basta con exponerlo aqui. */}
+              <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-800 hover:border-gray-700 cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 w-4 h-4 rounded border-gray-600 bg-gray-800 text-violet-500 focus:ring-violet-500 focus:ring-offset-gray-900"
+                  checked={formData.canCreateProjects}
+                  onChange={(e) =>
+                    setFormData({ ...formData, canCreateProjects: e.target.checked })
+                  }
+                />
+                <span>
+                  <span className="block text-sm font-medium text-gray-200">
+                    Puede crear proyectos
+                  </span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    Por defecto solo el dueno crea proyectos. Activa esto para
+                    delegarlo en este usuario.
+                  </span>
+                </span>
+              </label>
 
               <div className="flex justify-end gap-3 pt-4">
                 <Button

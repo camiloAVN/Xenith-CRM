@@ -2,6 +2,12 @@ import { prisma } from '@/lib/db/prisma'
 import { TaskFiltersDTO, CreateTaskDTO, UpdateTaskDTO } from '@/lib/dto/task.dto'
 import { TaskStatus } from '@prisma/client'
 
+/** Estado inicial de las capas de puntos, calculado por el servicio. */
+export interface TaskLifecycleInit {
+  votingClosesAt: Date
+  lateClockStartedAt: Date
+}
+
 const userSelect = {
   id: true,
   name: true,
@@ -68,7 +74,7 @@ export const taskRepository = {
     })
   },
 
-  async create(projectId: string, data: CreateTaskDTO) {
+  async create(projectId: string, data: CreateTaskDTO, lifecycle: TaskLifecycleInit) {
     const maxOrderResult = await prisma.task.aggregate({
       where: { projectId, status: data.status ?? 'TODO' },
       _max: { order: true },
@@ -82,13 +88,20 @@ export const taskRepository = {
         description: data.description,
         status: data.status ?? 'TODO',
         priority: data.priority ?? 'MEDIUM',
-        assignedTo: data.assignedTo ?? null,
+        assignedTo: data.assignedTo,
         reporterId: data.reporterId ?? null,
-        dueDate: data.dueDate ? new Date(data.dueDate) : null,
+        dueDate: new Date(data.dueDate),
         estimatedHours: data.estimatedHours ?? null,
         actualHours: data.actualHours ?? null,
         order: data.order ?? nextOrder,
         tags: data.tags ?? [],
+        // El trabajo arranca de una vez; la votación corre en paralelo.
+        valuationStatus: 'VOTING',
+        votingClosesAt: lifecycle.votingClosesAt,
+        completionStatus: 'PENDING',
+        // El reloj de retraso arranca ya, pero solo cuenta el tiempo posterior
+        // a dueDate, así que un tramo previo a la fecha límite suma cero.
+        lateClockStartedAt: lifecycle.lateClockStartedAt,
       },
       include: taskInclude,
     })
@@ -104,7 +117,7 @@ export const taskRepository = {
         ...(data.priority !== undefined && { priority: data.priority }),
         ...(data.assignedTo !== undefined && { assignedTo: data.assignedTo }),
         ...(data.reporterId !== undefined && { reporterId: data.reporterId }),
-        ...(data.dueDate !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null }),
+        ...(data.dueDate !== undefined && { dueDate: new Date(data.dueDate) }),
         ...(data.estimatedHours !== undefined && { estimatedHours: data.estimatedHours }),
         ...(data.actualHours !== undefined && { actualHours: data.actualHours }),
         ...(data.order !== undefined && { order: data.order }),

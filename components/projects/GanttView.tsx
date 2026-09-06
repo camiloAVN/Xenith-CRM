@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useEffect, useCallback } from 'react'
 import { TaskCardData } from './TaskCard'
+import { TaskPointsBadge } from './TaskPointsBadge'
 import { cn } from '@/lib/utils/cn'
 
 interface GanttViewProps {
@@ -30,7 +31,7 @@ const STATUS_LABELS: Record<string, string> = {
 const ROW_HEIGHT    = 36   // px — must match label row height
 const HEADER_HEIGHT = 48   // px — calendar header
 const DAY_WIDTH     = 32   // px per day
-const LABEL_W       = 200  // px — left label panel width
+const LABEL_W       = 250  // px — left label panel width (incluye el chip de puntos)
 
 function startOfDay(d: Date) {
   const r = new Date(d); r.setHours(0, 0, 0, 0); return r
@@ -142,16 +143,20 @@ export function GanttView({ tasks, projectStart, projectEnd, onTaskClick }: Gant
                 style={{ height: ROW_HEIGHT }}
                 title={task.title}
               >
-                <div className="flex items-center gap-1.5 min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0 w-full">
                   <span
                     className="w-2 h-2 rounded-full flex-shrink-0"
                     style={{ backgroundColor: STATUS_COLORS[task.status] ?? '#6b7280' }}
                   />
                   <span className={cn(
-                    'text-xs truncate',
+                    'text-xs truncate flex-1',
                     overdue ? 'text-red-400' : 'text-gray-300'
                   )}>
                     {task.title}
+                  </span>
+                  {/* El chip no se encoge: el titulo cede espacio antes que el valor. */}
+                  <span className="flex-shrink-0">
+                    <TaskPointsBadge task={task} size="sm" />
                   </span>
                 </div>
               </div>

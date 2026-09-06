@@ -1,17 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/db/prisma'
+import { getProjectPermissions, PROJECT_LEAD_ROLES } from '@/lib/auth/permissions'
 import { z, ZodError } from 'zod'
 
 const AddMemberSchema = z.object({
   userId: z.string().min(1),
   role: z.enum(['ADMIN', 'PROJECT_MANAGER', 'DEVELOPER', 'VIEWER']).default('DEVELOPER'),
 })
-
-async function isAdminOrSuperAdmin(userId: string) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } })
-  return user?.role === 'SUPERADMIN' || user?.role === 'ADMIN'
-}
 
 // GET /api/v1/projects/[id]/members
 export async function GET(
@@ -44,13 +40,24 @@ export async function POST(
   try {
     const session = await auth()
     if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    if (!(await isAdminOrSuperAdmin(session.user.id as string))) {
-      return NextResponse.json({ error: 'No tienes permisos para agregar miembros' }, { status: 403 })
-    }
 
     const { id } = await params
     const body = await request.json()
     const { userId, role } = AddMemberSchema.parse(body)
+
+    const perms = await getProjectPermissions(id, session.user.id as string)
+    if (!perms.canManageMembers) {
+      return NextResponse.json({ error: 'No tienes permisos para agregar miembros' }, { status: 403 })
+    }
+
+    // Un jefe puede sumar gente a su equipo, pero nombrar a otro jefe es
+    // exclusivo del dueño.
+    if (PROJECT_LEAD_ROLES.includes(role) && !perms.canManageLeads) {
+      return NextResponse.json(
+        { error: 'Solo el dueño puede nombrar jefes de proyecto' },
+        { status: 403 }
+      )
+    }
 
     const member = await prisma.projectMember.create({
       data: { projectId: id, userId, role },

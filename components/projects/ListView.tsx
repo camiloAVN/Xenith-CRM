@@ -4,13 +4,14 @@ import { useState } from 'react'
 import { ChevronUp, ChevronDown, Calendar, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { TaskCardData } from './TaskCard'
+import { TaskPointsBadge } from './TaskPointsBadge'
 
 interface ListViewProps {
   tasks: TaskCardData[]
   onTaskClick?: (task: TaskCardData) => void
 }
 
-type SortField = 'title' | 'status' | 'priority' | 'dueDate'
+type SortField = 'title' | 'status' | 'priority' | 'dueDate' | 'points'
 type SortDir = 'asc' | 'desc'
 
 const statusOrder = { TODO: 0, IN_PROGRESS: 1, REVIEW: 2, BLOCKED: 3, DONE: 4 }
@@ -71,6 +72,14 @@ export function ListView({ tasks, onTaskClick }: ListViewProps) {
         cmp = da - db
         break
       }
+      case 'points': {
+        // Se ordena por el valor EFECTIVO: es el que de verdad reparte.
+        // Las tareas sin valorar van al final en orden ascendente.
+        const pa = a.penalty?.effectivePoints ?? (a.pointsValue != null ? Number(a.pointsValue) : -1)
+        const pb = b.penalty?.effectivePoints ?? (b.pointsValue != null ? Number(b.pointsValue) : -1)
+        cmp = pa - pb
+        break
+      }
     }
     return sortDir === 'asc' ? cmp : -cmp
   })
@@ -80,6 +89,7 @@ export function ListView({ tasks, onTaskClick }: ListViewProps) {
     { key: 'status', label: 'Estado', className: 'w-32' },
     { key: 'priority', label: 'Prioridad', className: 'w-24' },
     { key: 'dueDate', label: 'Fecha límite', className: 'w-32' },
+    { key: 'points', label: 'Puntos', className: 'w-28' },
   ]
 
   return (
@@ -163,6 +173,11 @@ export function ListView({ tasks, onTaskClick }: ListViewProps) {
                 ) : (
                   <span className="text-gray-600">—</span>
                 )}
+              </div>
+
+              {/* Puntos */}
+              <div className="w-28">
+                <TaskPointsBadge task={task} size="md" />
               </div>
 
               {/* Assignee */}

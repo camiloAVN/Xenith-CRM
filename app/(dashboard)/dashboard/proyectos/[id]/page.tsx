@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   List,
   BarChart2,
+  PieChart,
   Plus,
   X,
 } from 'lucide-react'
@@ -21,9 +22,11 @@ import { GanttView } from '@/components/projects/GanttView'
 import { TaskFilters } from '@/components/projects/TaskFilters'
 import { TaskDetailPanel } from '@/components/projects/TaskDetailPanel'
 import { ProjectProgress } from '@/components/projects/ProjectProgress'
+import { ContributionShare } from '@/components/projects/ContributionShare'
 import { TaskCardData } from '@/components/projects/TaskCard'
 import { statusLabels, statusColors, priorityLabels, priorityColors } from '@/lib/validations/project'
 import { cn } from '@/lib/utils/cn'
+import toast from 'react-hot-toast'
 
 type ViewMode = 'kanban' | 'list' | 'gantt'
 type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'DONE' | 'BLOCKED'
@@ -39,6 +42,18 @@ interface ProjectData {
   client?: { id: string; name: string; company?: string | null }
   assignedUser?: { id: string; name?: string | null; email: string }
   members?: Array<{ user: { id: string; name?: string | null; email: string; image?: string | null } }>
+  permissions?: ProjectPermissions
+}
+
+interface ProjectPermissions {
+  isOwner: boolean
+  isLead: boolean
+  isMember: boolean
+  canManageMembers: boolean
+  canManageLeads: boolean
+  canManageTasks: boolean
+  canVote: boolean
+  canEditSettings: boolean
 }
 
 interface ProgressData {
@@ -98,7 +113,12 @@ export default function ProjectDetailPage({
   const [showNewTaskModal, setShowNewTaskModal] = useState(false)
   const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>('TODO')
   const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [newTaskAssignee, setNewTaskAssignee] = useState('')
+  const [newTaskDueDate, setNewTaskDueDate] = useState('')
   const [isCreatingTask, setIsCreatingTask] = useState(false)
+  // Se incrementa en cada cambio de tarea para que el reparto se recalcule:
+  // aceptar o reabrir una tarea mueve los porcentajes de todo el equipo.
+  const [contributionsKey, setContributionsKey] = useState(0)
 
   // Fetch project and initial data
   const loadProject = useCallback(async () => {
@@ -157,7 +177,22 @@ export default function ProjectDetailPage({
   const refreshProgress = useCallback(async () => {
     const res = await fetch(`/api/v1/projects/${id}/progress`)
     if (res.ok) setProgress(await res.json())
+    setContributionsKey((k) => k + 1)
   }, [id])
+
+  // Equipo asignable: miembros del proyecto + el líder (los proyectos viejos
+  // pueden no tener fila en ProjectMember para el líder). El backend exige que
+  // el asignado sea del equipo, así que la lista tiene que coincidir.
+  const teamMembers = (() => {
+    const map = new Map<string, { id: string; name?: string | null; email: string }>()
+    for (const m of project?.members ?? []) map.set(m.user.id, m.user)
+    if (project?.assignedUser) map.set(project.assignedUser.id, project.assignedUser)
+    return [...map.values()]
+  })()
+
+  const canManageTasks = project?.permissions?.canManageTasks ?? false
+  const canCreateTask =
+    newTaskTitle.trim().length > 0 && newTaskAssignee !== '' && newTaskDueDate !== ''
 
   const handleTaskClick = (task: TaskCardData) => {
     setSelectedTask(task)
@@ -202,17 +237,24 @@ export default function ProjectDetailPage({
   const handleAddTask = (status: TaskStatus) => {
     setNewTaskStatus(status)
     setNewTaskTitle('')
+    setNewTaskAssignee('')
+    setNewTaskDueDate('')
     setShowNewTaskModal(true)
   }
 
   const handleCreateTask = async () => {
-    if (!newTaskTitle.trim() || isCreatingTask) return
+    if (!canCreateTask || isCreatingTask) return
     setIsCreatingTask(true)
     try {
       const res = await fetch(`/api/v1/projects/${id}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newTaskTitle.trim(), status: newTaskStatus }),
+        body: JSON.stringify({
+          title: newTaskTitle.trim(),
+          status: newTaskStatus,
+          assignedTo: newTaskAssignee,
+          dueDate: newTaskDueDate,
+        }),
       })
       if (res.ok) {
         const task = await res.json()
@@ -223,7 +265,14 @@ export default function ProjectDetailPage({
         }))
         setShowNewTaskModal(false)
         setNewTaskTitle('')
+        setNewTaskAssignee('')
+        setNewTaskDueDate('')
         refreshProgress()
+        toast.success('Tarea creada — votación de puntos abierta')
+      } else {
+        // Un fallo silencioso aquí dejaba el modal abierto sin explicar nada.
+        const err = await res.json().catch(() => null)
+        toast.error(err?.error || 'No se pudo crear la tarea')
       }
     } finally {
       setIsCreatingTask(false)
@@ -284,19 +333,27 @@ export default function ProjectDetailPage({
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            <Link href={`/dashboard/proyectos/${id}/aportes`}>
+              <Button variant="outline" size="sm">
+                <PieChart className="w-4 h-4 mr-1.5" />
+                Aportes
+              </Button>
+            </Link>
             <Link href={`/dashboard/proyectos/${id}/editar`}>
               <Button variant="outline" size="sm">
                 <Edit className="w-4 h-4 mr-1.5" />
                 Editar
               </Button>
             </Link>
-            <Button
-              size="sm"
-              onClick={() => handleAddTask('TODO')}
-            >
-              <Plus className="w-4 h-4 mr-1.5" />
-              Nueva Tarea
-            </Button>
+            {canManageTasks && (
+              <Button
+                size="sm"
+                onClick={() => handleAddTask('TODO')}
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Nueva Tarea
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -365,6 +422,9 @@ export default function ProjectDetailPage({
         <TaskFilters users={users} filters={filters} onChange={setFilters} />
       </Card>
 
+      {/* ---- Aporte y reparto — común a las tres vistas ---- */}
+      <ContributionShare projectId={id} refreshKey={contributionsKey} />
+
       {/* ---- Main view ---- */}
       <div className="min-w-0">
         {viewMode === 'kanban' && (
@@ -372,7 +432,7 @@ export default function ProjectDetailPage({
             projectId={id}
             initialTasks={kanbanBoard}
             onTaskClick={handleTaskClick}
-            onAddTask={handleAddTask}
+            onAddTask={canManageTasks ? handleAddTask : undefined}
           />
         )}
 
@@ -396,6 +456,7 @@ export default function ProjectDetailPage({
         projectId={id}
         users={users}
         currentUserId={session?.user?.id as string ?? ''}
+        canManageTasks={canManageTasks}
         isOpen={isPanelOpen}
         onClose={() => {
           setIsPanelOpen(false)
@@ -434,12 +495,45 @@ export default function ProjectDetailPage({
                     value={newTaskTitle}
                     onChange={(e) => setNewTaskTitle(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleCreateTask()
                       if (e.key === 'Escape') setShowNewTaskModal(false)
                     }}
                     placeholder="¿Qué hay que hacer?"
                     autoFocus
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-violet-500 transition-colors"
+                  />
+                </div>
+
+                {/* Asignado y fecha límite son obligatorios: sin asignado no
+                    hay a quién acreditar los puntos y sin fecha límite no hay
+                    penalización que calcular. */}
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1.5">Asignado a *</label>
+                  <select
+                    value={newTaskAssignee}
+                    onChange={(e) => setNewTaskAssignee(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-violet-500 transition-colors"
+                  >
+                    <option value="">Selecciona a quién</option>
+                    {teamMembers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name || u.email}
+                      </option>
+                    ))}
+                  </select>
+                  {teamMembers.length === 0 && (
+                    <p className="text-xs text-amber-400 mt-1.5">
+                      El proyecto no tiene miembros todavía.
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1.5">Fecha límite *</label>
+                  <input
+                    type="date"
+                    value={newTaskDueDate}
+                    onChange={(e) => setNewTaskDueDate(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-violet-500 transition-colors"
                   />
                 </div>
 
@@ -470,7 +564,13 @@ export default function ProjectDetailPage({
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 mt-6">
+              <p className="text-xs text-gray-500 mt-4 leading-relaxed">
+                Al crearla se abre la ventana de votación de puntos para el
+                equipo. El trabajo puede empezar de una vez: la votación corre
+                en paralelo.
+              </p>
+
+              <div className="flex justify-end gap-3 mt-4">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -482,7 +582,7 @@ export default function ProjectDetailPage({
                   size="sm"
                   onClick={handleCreateTask}
                   isLoading={isCreatingTask}
-                  disabled={!newTaskTitle.trim()}
+                  disabled={!canCreateTask}
                 >
                   Crear Tarea
                 </Button>

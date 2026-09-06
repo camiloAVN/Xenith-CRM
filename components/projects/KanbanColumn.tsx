@@ -65,13 +65,15 @@ export function KanbanColumn({ status, tasks, onTaskClick, onAddTask, fullWidth 
             {tasks.length}
           </span>
         </div>
-        <button
-          onClick={() => onAddTask?.(status)}
-          className="p-0.5 rounded hover:bg-gray-700 text-gray-500 hover:text-gray-200 transition-colors"
-          title={`Agregar tarea en ${config.label}`}
-        >
-          <Plus className="w-4 h-4" />
-        </button>
+        {onAddTask && (
+          <button
+            onClick={() => onAddTask(status)}
+            className="p-0.5 rounded hover:bg-gray-700 text-gray-500 hover:text-gray-200 transition-colors"
+            title={`Agregar tarea en ${config.label}`}
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Drop zone */}

@@ -1,8 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { X, Trash2, ChevronDown, Clock, History } from 'lucide-react'
+import { X, Trash2, ChevronDown, Clock, History, CheckCircle2 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils/cn'
+import { TaskVoting } from './TaskVoting'
+import { TaskApproval } from './TaskApproval'
+import { TaskPenalty, type TaskPenaltyData } from './TaskPenalty'
 import { TaskComments } from './TaskComments'
 import { TaskHistory } from './TaskHistory'
 
@@ -25,6 +29,16 @@ interface TaskDetail {
   estimatedHours?: number | null
   actualHours?: number | null
   tags?: string[]
+  // Capa de puntos (convive con el flujo Kanban de `status`)
+  valuationStatus?: 'VOTING' | 'EXTENDED' | 'VALUED'
+  completionStatus?: 'PENDING' | 'SUBMITTED' | 'ACCEPTED'
+  pointsValue?: string | number | null
+  effectivePoints?: string | number | null
+  needsDiscussion?: boolean
+  submittedAt?: string | Date | null
+  acceptedAt?: string | Date | null
+  /** Penalizacion vigente, calculada en el servidor. */
+  penalty?: TaskPenaltyData | null
   assignedUser?: User | null
   reporter?: User | null
   comments?: Array<{
@@ -49,6 +63,8 @@ interface TaskDetailPanelProps {
   projectId: string
   users?: User[]
   currentUserId: string
+  /** Permisos del usuario en este proyecto; sin ellos se asume el mínimo. */
+  canManageTasks?: boolean
   isOpen: boolean
   onClose: () => void
   onTaskUpdated?: (task: TaskDetail) => void
@@ -121,6 +137,7 @@ export function TaskDetailPanel({
   projectId,
   users = [],
   currentUserId,
+  canManageTasks = false,
   isOpen,
   onClose,
   onTaskUpdated,
@@ -129,6 +146,7 @@ export function TaskDetailPanel({
   const [fullTask, setFullTask] = useState<TaskDetail | null>(task)
   const [isLoadingFull, setIsLoadingFull] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('comments')
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
@@ -194,6 +212,29 @@ export function TaskDetailPanel({
     }
   }
 
+  const handleSubmitCompletion = async () => {
+    if (!task || isSubmitting) return
+    setIsSubmitting(true)
+    try {
+      const res = await fetch(
+        `/api/v1/projects/${projectId}/tasks/${task.id}/submit`,
+        { method: 'POST' }
+      )
+      const data = await res.json().catch(() => null)
+      if (res.ok) {
+        onTaskUpdated?.({ ...fullTask!, ...data })
+        // Refetch en vez de mezclar: la respuesta cruda no trae la penalizacion
+        // recalculada, y el reloj acaba de pausarse.
+        await loadFullTask()
+        toast.success('Tarea marcada como terminada. Los jefes deben aceptarla.')
+      } else {
+        toast.error(data?.error || 'No se pudo marcar la tarea')
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const handleDelete = async () => {
     if (!task || !confirm('¿Eliminar esta tarea? Esta acción no se puede deshacer.')) return
     try {
@@ -234,13 +275,15 @@ export function TaskDetailPanel({
             {isSaving && (
               <span className="text-xs text-gray-500 animate-pulse">Guardando...</span>
             )}
-            <button
-              onClick={handleDelete}
-              className="p-1.5 rounded-lg hover:bg-red-500/10 text-gray-500 hover:text-red-400 transition-colors"
-              title="Eliminar tarea"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {canManageTasks && (
+              <button
+                onClick={handleDelete}
+                className="p-1.5 rounded-lg hover:bg-red-500/10 text-gray-500 hover:text-red-400 transition-colors"
+                title="Eliminar tarea"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-500 hover:text-gray-200 transition-colors"
@@ -291,6 +334,41 @@ export function TaskDetailPanel({
                 )}
               </div>
 
+              {/* Valoración por puntos — corre en paralelo al trabajo. */}
+              <TaskVoting
+                projectId={projectId}
+                taskId={ft.id}
+                onSettled={loadFullTask}
+              />
+
+              {/* Penalización por retraso — solo aparece si hay retraso real. */}
+              <TaskPenalty
+                penalty={ft.penalty}
+                isAccepted={ft.completionStatus === 'ACCEPTED'}
+              />
+
+              {/* Cumplimiento — el asignado marca terminada; el crédito de
+                  puntos ocurre después, cuando los jefes aceptan. */}
+              {ft.completionStatus === 'PENDING' && ft.assignedTo === currentUserId && (
+                <button
+                  onClick={handleSubmitCompletion}
+                  disabled={isSubmitting}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-violet-500/15 border border-violet-500/30 text-violet-200 hover:bg-violet-500/25 disabled:opacity-50 transition-colors text-sm font-medium"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  {isSubmitting ? 'Marcando...' : 'Marcar como terminada'}
+                </button>
+              )}
+
+              {/* Aprobación de los jefes + acreditación. Se oculta solo cuando
+                  la tarea aún no se ha marcado como terminada. */}
+              <TaskApproval
+                projectId={projectId}
+                taskId={ft.id}
+                canManageTasks={canManageTasks}
+                onChanged={loadFullTask}
+              />
+
               {/* Description */}
               <div>
                 <label className="text-xs text-gray-500 block mb-1.5">Descripción</label>
@@ -332,10 +410,13 @@ export function TaskDetailPanel({
                   <div className="relative">
                     <select
                       value={ft.assignedTo ?? ''}
-                      onChange={(e) => updateField('assignedTo', e.target.value || null)}
-                      className="w-full appearance-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 pr-8 transition-colors"
+                      // Una tarea no puede quedarse sin asignado: no habria a
+                      // quien acreditarle los puntos. Solo se reasigna.
+                      onChange={(e) => e.target.value && updateField('assignedTo', e.target.value)}
+                      disabled={!canManageTasks}
+                      className="w-full appearance-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 pr-8 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      <option value="">Sin asignar</option>
+                      {!ft.assignedTo && <option value="">Sin asignar</option>}
                       {users.map((u) => (
                         <option key={u.id} value={u.id}>
                           {u.name ?? u.email}
@@ -360,8 +441,11 @@ export function TaskDetailPanel({
                   <input
                     type="date"
                     value={ft.dueDate ? new Date(ft.dueDate).toISOString().split('T')[0] : ''}
-                    onChange={(e) => updateField('dueDate', e.target.value || null)}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 transition-colors"
+                    // Vaciarla dejaria la tarea sin penalizacion calculable, asi
+                    // que solo se acepta un cambio a otra fecha.
+                    onChange={(e) => e.target.value && updateField('dueDate', e.target.value)}
+                    disabled={!canManageTasks}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   />
                 </div>
 

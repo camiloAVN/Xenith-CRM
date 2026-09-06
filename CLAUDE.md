@@ -58,7 +58,7 @@ NextAuth.js v5 (Auth.js) with the Credentials provider. JWT session strategy (8h
 Prisma ORM with PostgreSQL. The singleton client lives in `lib/db/prisma.ts`. Core models:
 - `User` — auth + role-based access
 - `Client` — CRM contacts
-- `Project` — linked to Client + assigned User (líder), has `Task[]` and `ProjectMember[]`
+- `Project` — optional Client (`clientId` is nullable; proyectos y clientes son módulos independientes) + assigned User (líder), has `Task[]` and `ProjectMember[]`
 - `Task` — full Jira-style tasks with status, priority, assignee, reporter, hours, order, tags
 - `TaskComment` — threaded comments per task
 - `TaskAttachment` — file attachment metadata (upload UI not yet implemented; POST returns 501)

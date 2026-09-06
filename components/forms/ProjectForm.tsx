@@ -50,7 +50,7 @@ export function ProjectForm({
       ? {
           title: project.title,
           description: project.description,
-          clientId: project.clientId,
+          clientId: project.clientId || '',
           assignedTo: project.assignedTo,
           status: project.status,
           priority: project.priority,
@@ -117,7 +117,7 @@ export function ProjectForm({
   const statusOptions = Object.entries(statusLabels).map(([value, label]) => ({ value, label }))
   const priorityOptions = Object.entries(priorityLabels).map(([value, label]) => ({ value, label }))
   const clientOptions = [
-    { value: '', label: 'Selecciona un cliente' },
+    { value: '', label: 'Sin cliente' },
     ...clients.map((c) => ({ value: c.id, label: `${c.name}${c.company ? ` - ${c.company}` : ''}` })),
   ]
   const userOptions = [
@@ -153,7 +153,7 @@ export function ProjectForm({
         </div>
 
         <Select
-          label="Cliente *"
+          label="Cliente (opcional)"
           options={clientOptions}
           error={errors.clientId?.message}
           {...register('clientId')}

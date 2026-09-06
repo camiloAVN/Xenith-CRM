@@ -3,6 +3,7 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/db/prisma'
 import { projectSchema } from '@/lib/validations/project'
 import { projectService } from '@/lib/services/project.service'
+import { getProjectPermissions } from '@/lib/auth/permissions'
 import { ZodError } from 'zod'
 import { Decimal } from '@prisma/client/runtime/library'
 
@@ -30,7 +31,12 @@ export async function GET(
 
     if (!project) return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 })
 
-    return NextResponse.json(project)
+    // Los permisos del usuario en ESTE proyecto viajan con el proyecto: la UI
+    // los necesita para decidir qué acciones mostrar y así se evita un
+    // round-trip extra en cada carga del tablero.
+    const permissions = await getProjectPermissions(id, session.user.id as string)
+
+    return NextResponse.json({ ...project, permissions })
   } catch (error) {
     console.error('Error fetching project:', error)
     return NextResponse.json({ error: 'Error al obtener proyecto' }, { status: 500 })
@@ -71,7 +77,7 @@ export async function PUT(
         title: validatedData.title,
         description: validatedData.description,
         status: validatedData.status,
-        clientId: validatedData.clientId,
+        clientId: validatedData.clientId || null,
         assignedTo: validatedData.assignedTo,
         priority: validatedData.priority,
         startDate: validatedData.startDate ? new Date(validatedData.startDate) : null,

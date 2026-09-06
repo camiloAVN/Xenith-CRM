@@ -94,7 +94,7 @@ export async function PUT(
         title: validatedData.title,
         description: validatedData.description,
         status: validatedData.status,
-        clientId: validatedData.clientId,
+        clientId: validatedData.clientId || null,
         assignedTo: validatedData.assignedTo,
         priority: validatedData.priority,
         startDate: validatedData.startDate ? new Date(validatedData.startDate) : null,

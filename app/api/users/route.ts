@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
         role: true,
         position: true,
         isActive: true,
+        canCreateProjects: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -112,6 +113,7 @@ export async function POST(request: NextRequest) {
         password: hashedPassword,
         role: validatedData.role,
         position: validatedData.position ?? null,
+        canCreateProjects: validatedData.canCreateProjects ?? false,
       },
       select: {
         id: true,
@@ -120,6 +122,7 @@ export async function POST(request: NextRequest) {
         role: true,
         position: true,
         isActive: true,
+        canCreateProjects: true,
         createdAt: true,
         updatedAt: true,
       },

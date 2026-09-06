@@ -45,11 +45,17 @@ export function ProjectsTable({ projects, onDelete }: ProjectsTableProps) {
             <tr key={project.id}>
               <td className="font-medium">{project.title}</td>
               <td>
-                {project.client?.name}
-                {project.client?.company && (
-                  <span className="text-sm text-gray-500 block">
-                    {project.client.company}
-                  </span>
+                {project.client ? (
+                  <>
+                    {project.client.name}
+                    {project.client.company && (
+                      <span className="text-sm text-gray-500 block">
+                        {project.client.company}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-gray-600">Sin cliente</span>
                 )}
               </td>
               <td>

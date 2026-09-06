@@ -37,6 +37,7 @@ export async function GET(
         role: true,
         position: true,
         isActive: true,
+        canCreateProjects: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -126,6 +127,9 @@ export async function PUT(
       ...(validatedData.role && { role: validatedData.role }),
       ...('position' in validatedData && { position: validatedData.position ?? null }),
       ...(validatedData.isActive !== undefined && { isActive: validatedData.isActive }),
+      ...(validatedData.canCreateProjects !== undefined && {
+        canCreateProjects: validatedData.canCreateProjects,
+      }),
     }
 
     // Si se actualiza password, hash it
@@ -143,6 +147,7 @@ export async function PUT(
         role: true,
         position: true,
         isActive: true,
+        canCreateProjects: true,
         createdAt: true,
         updatedAt: true,
       },

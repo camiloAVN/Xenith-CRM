@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { taskService } from '@/lib/services/task.service'
+import { taskService, TaskPermissionError } from '@/lib/services/task.service'
 import { CreateTaskSchema, TaskFiltersSchema } from '@/lib/dto/task.dto'
 import { ZodError } from 'zod'
 
@@ -60,6 +60,9 @@ export async function POST(
   } catch (error) {
     if (error instanceof ZodError) {
       return NextResponse.json({ error: 'Datos inválidos', issues: error.issues }, { status: 400 })
+    }
+    if (error instanceof TaskPermissionError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
     }
     if (error instanceof Error) {
       return NextResponse.json({ error: error.message }, { status: 422 })

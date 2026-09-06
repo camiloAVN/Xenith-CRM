@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { taskService } from '@/lib/services/task.service'
+import { taskService, TaskPermissionError } from '@/lib/services/task.service'
 import { UpdateTaskSchema } from '@/lib/dto/task.dto'
 import { ZodError } from 'zod'
 
@@ -44,6 +44,9 @@ export async function PUT(
     if (error instanceof ZodError) {
       return NextResponse.json({ error: 'Datos inválidos', issues: error.issues }, { status: 400 })
     }
+    if (error instanceof TaskPermissionError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     if (error instanceof Error) {
       return NextResponse.json({ error: error.message }, { status: 422 })
     }
@@ -62,9 +65,12 @@ export async function DELETE(
     if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { taskId } = await params
-    await taskService.deleteTask(taskId)
+    await taskService.deleteTask(taskId, session.user.id as string)
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof TaskPermissionError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     if (error instanceof Error) {
       return NextResponse.json({ error: error.message }, { status: 422 })
     }

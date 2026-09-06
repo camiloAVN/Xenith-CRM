@@ -25,6 +25,9 @@ export const createUserSchema = z.object({
     .max(100, 'El cargo no puede exceder 100 caracteres')
     .optional()
     .nullable(),
+  // Permiso que solo el superadmin puede otorgar. Por defecto nadie mas que
+  // el dueno puede crear proyectos.
+  canCreateProjects: z.boolean().optional().default(false),
 })
 
 export const updateUserSchema = z.object({
@@ -53,6 +56,7 @@ export const updateUserSchema = z.object({
     .optional()
     .nullable(),
   isActive: z.boolean().optional(),
+  canCreateProjects: z.boolean().optional(),
 })
 
 export const changePasswordSchema = z
@@ -83,6 +87,7 @@ export type User = {
   role: UserRole
   position: string | null
   isActive: boolean
+  canCreateProjects: boolean
   createdAt: Date
   updatedAt: Date
 }

@@ -3,7 +3,8 @@ import { z } from 'zod'
 export const projectSchema = z.object({
   title: z.string().min(3, 'El título debe tener al menos 3 caracteres'),
   description: z.string().min(10, 'La descripción debe tener al menos 10 caracteres'),
-  clientId: z.string().min(1, 'Debes seleccionar un cliente'),
+  // El cliente es opcional: los proyectos pueden existir sin cliente asociado.
+  clientId: z.string().optional().nullable(),
   assignedTo: z.string().min(1, 'Debes asignar el proyecto a un usuario'),
   status: z.enum(['PROSPECT', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED']),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']),
@@ -25,7 +26,7 @@ export type Project = {
   title: string
   description: string
   status: ProjectStatus
-  clientId: string
+  clientId: string | null
   assignedTo: string
   startDate: Date | null
   endDate: Date | null
@@ -40,7 +41,7 @@ export type Project = {
     name: string
     company: string | null
     email: string
-  }
+  } | null
   assignedUser?: {
     id: string
     name: string | null

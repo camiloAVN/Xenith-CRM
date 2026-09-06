@@ -4,6 +4,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Calendar, Clock, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
+import { TaskPointsBadge, type TaskPointsData } from './TaskPointsBadge'
 
 export interface TaskCardData {
   id: string
@@ -16,6 +17,12 @@ export interface TaskCardData {
   actualHours?: number | null
   tags?: string[]
   assignedUser?: { id: string; name?: string | null; email: string; image?: string | null } | null
+  // Capa de puntos — la envia el servidor ya calculada en las tres vistas.
+  valuationStatus?: TaskPointsData['valuationStatus']
+  completionStatus?: TaskPointsData['completionStatus']
+  pointsValue?: TaskPointsData['pointsValue']
+  needsDiscussion?: TaskPointsData['needsDiscussion']
+  penalty?: TaskPointsData['penalty']
 }
 
 const priorityConfig = {
@@ -82,8 +89,8 @@ export function TaskCard({ task, onClick, isDragging }: TaskCardProps) {
         <GripVertical className="w-4 h-4" />
       </div>
 
-      {/* Priority badge */}
-      <div className="flex items-center gap-2 mb-2">
+      {/* Priority + valor en puntos */}
+      <div className="flex items-center gap-2 mb-2 flex-wrap pr-6">
         <span
           className={cn(
             'inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium border',
@@ -92,6 +99,7 @@ export function TaskCard({ task, onClick, isDragging }: TaskCardProps) {
         >
           {priority.label}
         </span>
+        <TaskPointsBadge task={task} size="sm" />
       </div>
 
       {/* Title */}
