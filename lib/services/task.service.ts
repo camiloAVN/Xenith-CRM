@@ -9,7 +9,7 @@ import {
 import { TaskStatus } from '@prisma/client'
 import { getProjectPermissions, getProjectMemberIds } from '@/lib/auth/permissions'
 import { contributionSettingsService } from '@/lib/services/contribution-settings.service'
-import { canSubmitCompletion } from '@/lib/services/task-lifecycle'
+import { canSubmitCompletion, canAssigneeChangeStatus } from '@/lib/services/task-lifecycle'
 import { notificationService } from '@/lib/services/notification.service'
 import {
   intervalLateDays,
@@ -224,6 +224,16 @@ export const taskService = {
           `Solo un jefe del proyecto puede cambiar: ${forbidden.join(', ')}`
         )
       }
+
+      if (
+        data.status !== undefined &&
+        data.status !== existing.status &&
+        !canAssigneeChangeStatus(existing.status, data.status)
+      ) {
+        throw new TaskPermissionError(
+          'Solo puedes mover tu tarea de "Por Hacer" a "En Progreso". Cuando la termines, márcala como terminada y pasa sola a revisión.'
+        )
+      }
     }
 
     // Build history entries for changed tracked fields
@@ -307,6 +317,32 @@ export const taskService = {
     if (!perms.isMember && !perms.isOwner) {
       throw new TaskPermissionError('Solo los miembros del proyecto pueden mover tareas')
     }
+
+    // Sin esta validación la regla de estados sería decorativa: bastaría con
+    // arrastrar la tarjeta en el Kanban para saltársela. Reordenar dentro de
+    // una misma columna sigue libre para todo el equipo.
+    if (!perms.canManageTasks) {
+      const current = await prisma.task.findMany({
+        where: { id: { in: tasks.map((t) => t.id) } },
+        select: { id: true, status: true, assignedTo: true },
+      })
+      const byId = new Map(current.map((t) => [t.id, t]))
+
+      for (const t of tasks) {
+        const existing = byId.get(t.id)
+        if (!existing || existing.status === t.status) continue
+
+        if (
+          existing.assignedTo !== currentUserId ||
+          !canAssigneeChangeStatus(existing.status, t.status)
+        ) {
+          throw new TaskPermissionError(
+            'Solo puedes mover tus propias tareas de "Por Hacer" a "En Progreso". El resto de columnas las mueve el flujo de aprobación.'
+          )
+        }
+      }
+    }
+
     return taskRepository.reorder(tasks)
   },
 

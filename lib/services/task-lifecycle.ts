@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db/prisma'
 import { getProjectLeadIds, getProjectMemberIds } from '@/lib/auth/permissions'
-import type { TaskCompletionStatus, TaskValuationStatus } from '@prisma/client'
+import type { TaskCompletionStatus, TaskStatus, TaskValuationStatus } from '@prisma/client'
 
 /**
  * Máquina de estados de la tarea.
@@ -20,6 +20,20 @@ import type { TaskCompletionStatus, TaskValuationStatus } from '@prisma/client'
  * Mover una tarjeta a DONE en el Kanban NO acredita puntos: el crédito ocurre
  * solo al llegar a ACCEPTED. Son capas que conviven, no una sola.
  */
+
+/**
+ * Unico movimiento de columna que puede hacer quien NO es jefe: arrancar su
+ * propia tarea.
+ *
+ * Todo lo demas lo maneja el flujo de cumplimiento: marcar terminada la lleva
+ * a "En Revision", la aceptacion a "Hecho" y el rechazo de vuelta a "En
+ * Progreso". Si el asignado pudiera arrastrarla a "Hecho" a mano, el tablero
+ * diria "hecha" sin que ningun jefe la haya aceptado ni se hubieran acreditado
+ * los puntos.
+ */
+export function canAssigneeChangeStatus(from: TaskStatus, to: TaskStatus): boolean {
+  return from === 'TODO' && to === 'IN_PROGRESS'
+}
 
 export interface LifecycleCheck {
   ok: boolean

@@ -40,7 +40,7 @@ interface KanbanColumnProps {
   status: ColumnStatus
   tasks: TaskCardData[]
   onTaskClick?: (task: TaskCardData) => void
-  onAddTask?: (status: ColumnStatus) => void
+  onAddTask?: () => void
   /** Expands to full parent width — used in mobile single-column view */
   fullWidth?: boolean
 }
@@ -67,7 +67,7 @@ export function KanbanColumn({ status, tasks, onTaskClick, onAddTask, fullWidth 
         </div>
         {onAddTask && (
           <button
-            onClick={() => onAddTask(status)}
+            onClick={onAddTask}
             className="p-0.5 rounded hover:bg-gray-700 text-gray-500 hover:text-gray-200 transition-colors"
             title={`Agregar tarea en ${config.label}`}
           >

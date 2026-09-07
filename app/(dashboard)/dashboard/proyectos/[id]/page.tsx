@@ -111,7 +111,6 @@ export default function ProjectDetailPage({
   const [selectedTask, setSelectedTask] = useState<TaskCardData | null>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [showNewTaskModal, setShowNewTaskModal] = useState(false)
-  const [newTaskStatus, setNewTaskStatus] = useState<TaskStatus>('TODO')
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskAssignee, setNewTaskAssignee] = useState('')
   const [newTaskDueDate, setNewTaskDueDate] = useState('')
@@ -236,8 +235,10 @@ export default function ProjectDetailPage({
     [refreshProgress, loadTasks]
   )
 
-  const handleAddTask = (status: TaskStatus) => {
-    setNewTaskStatus(status)
+  // Toda tarea nace en "Por Hacer": el resto de columnas las mueve el flujo
+  // (el asignado arranca, marcar terminada la lleva a revisión y la
+  // aceptación a hecho), así que no hay estado inicial que escoger.
+  const handleAddTask = () => {
     setNewTaskTitle('')
     setNewTaskAssignee('')
     setNewTaskDueDate('')
@@ -253,7 +254,7 @@ export default function ProjectDetailPage({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: newTaskTitle.trim(),
-          status: newTaskStatus,
+          status: 'TODO',
           assignedTo: newTaskAssignee,
           dueDate: newTaskDueDate,
         }),
@@ -261,10 +262,7 @@ export default function ProjectDetailPage({
       if (res.ok) {
         const task = await res.json()
         setAllTasks((prev) => [task, ...prev])
-        setKanbanBoard((prev) => ({
-          ...prev,
-          [newTaskStatus]: [...prev[newTaskStatus], task],
-        }))
+        setKanbanBoard((prev) => ({ ...prev, TODO: [...prev.TODO, task] }))
         setShowNewTaskModal(false)
         setNewTaskTitle('')
         setNewTaskAssignee('')
@@ -353,7 +351,7 @@ export default function ProjectDetailPage({
             {canManageTasks && (
               <Button
                 size="sm"
-                onClick={() => handleAddTask('TODO')}
+                onClick={handleAddTask}
               >
                 <Plus className="w-4 h-4 mr-1.5" />
                 Nueva Tarea
@@ -543,37 +541,12 @@ export default function ProjectDetailPage({
                   />
                 </div>
 
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1.5">Estado inicial</label>
-                  <div className="flex flex-wrap gap-2">
-                    {(
-                      [
-                        { value: 'TODO', label: 'Por Hacer' },
-                        { value: 'IN_PROGRESS', label: 'En Progreso' },
-                        { value: 'REVIEW', label: 'En Revisión' },
-                      ] as { value: TaskStatus; label: string }[]
-                    ).map((opt) => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setNewTaskStatus(opt.value)}
-                        className={cn(
-                          'px-3 py-1 text-xs rounded-md border transition-colors font-medium',
-                          newTaskStatus === opt.value
-                            ? 'bg-violet-500/20 border-violet-500/50 text-violet-300'
-                            : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
 
               <p className="text-xs text-gray-500 mt-4 leading-relaxed">
-                Al crearla se abre la ventana de votación de puntos para el
-                equipo. El trabajo puede empezar de una vez: la votación corre
-                en paralelo.
+                La tarea nace en <span className="text-gray-300">Por Hacer</span> y
+                se abre la ventana de votación de puntos. El asignado la pasa a
+                En Progreso; de ahí en adelante la mueve el flujo de aprobación.
               </p>
 
               <div className="flex justify-end gap-3 mt-4">

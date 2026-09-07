@@ -41,12 +41,19 @@ export function ProjectForm({
   const [users, setUsers] = useState<UserOption[]>([])
   const [loadingData, setLoadingData] = useState(true)
   const [memberIds, setMemberIds] = useState<string[]>(initialMemberIds)
-  const [leaderIds, setLeaderIds] = useState<string[]>(initialLeaderIds)
+  // El líder guardado siempre encabeza la lista de jefes al editar.
+  const [leaderIds, setLeaderIds] = useState<string[]>(() => {
+    const base = project?.assignedTo
+      ? [project.assignedTo, ...initialLeaderIds.filter((id) => id !== project.assignedTo)]
+      : initialLeaderIds
+    return [...new Set(base)]
+  })
 
   const {
     register,
     handleSubmit,
     control,
+    setValue,
     formState: { errors },
   } = useForm<ProjectFormData>({
     resolver: zodResolver(projectSchema),
@@ -69,8 +76,20 @@ export function ProjectForm({
         },
   })
 
-  // Observar el líder seleccionado para mostrarlo como fijo en el equipo
   const assignedTo = useWatch({ control, name: 'assignedTo' })
+
+  /**
+   * `Project.assignedTo` es obligatorio en la base y sigue existiendo como el
+   * jefe "principal" del proyecto, pero ya no se escoge aparte: es el primero
+   * de la lista de jefes. Tener dos campos para lo mismo hacía que se pudiera
+   * dejar un líder que no estaba entre los jefes.
+   */
+  useEffect(() => {
+    const primary = leaderIds[0] ?? ''
+    if (primary !== assignedTo) {
+      setValue('assignedTo', primary, { shouldValidate: true })
+    }
+  }, [leaderIds, assignedTo, setValue])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -130,23 +149,19 @@ export function ProjectForm({
     { value: '', label: 'Sin cliente' },
     ...clients.map((c) => ({ value: c.id, label: `${c.name}${c.company ? ` - ${c.company}` : ''}` })),
   ]
-  const userOptions = [
-    { value: '', label: 'Selecciona un usuario' },
-    ...users.map((u) => ({ value: u.id, label: u.name || u.email })),
-  ]
 
-  const leader = users.find((u) => u.id === assignedTo)
-  // Usuarios disponibles para los pickers (el líder ya es jefe fijo)
-  const availableUsers = users.filter((u) => u.id !== assignedTo)
-  // Un jefe adicional no se lista otra vez como desarrollador: el rol de jefe
-  // manda, igual que en el backend.
-  const extraLeaders = users.filter((u) => leaderIds.includes(u.id) && u.id !== assignedTo)
+  // Un jefe no se lista otra vez como desarrollador: el rol de jefe manda,
+  // igual que en el backend.
+  const availableMembers = users.filter((u) => !leaderIds.includes(u.id))
   const selectedMembers = users.filter(
-    (u) => memberIds.includes(u.id) && u.id !== assignedTo && !leaderIds.includes(u.id)
+    (u) => memberIds.includes(u.id) && !leaderIds.includes(u.id)
   )
 
   return (
     <form onSubmit={handleSubmit(internalSubmit)} className="space-y-6">
+      {/* Se deriva del primer jefe seleccionado; no se muestra. */}
+      <input type="hidden" {...register('assignedTo')} />
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="md:col-span-2">
           <Input
@@ -172,13 +187,6 @@ export function ProjectForm({
           options={clientOptions}
           error={errors.clientId?.message}
           {...register('clientId')}
-        />
-
-        <Select
-          label="Líder del Proyecto *"
-          options={userOptions}
-          error={errors.assignedTo?.message}
-          {...register('assignedTo')}
         />
 
         <Select
@@ -234,25 +242,16 @@ export function ProjectForm({
           <h3 className="text-sm font-semibold text-gray-200">Equipo del Proyecto</h3>
         </div>
 
-        {/* Jefes del proyecto: el líder es fijo, los demás se marcan aquí.
-            Pueden ser varios — lo ideal es al menos dos, porque un jefe nunca
-            aprueba su propia tarea y con uno solo tendría que firmar el dueño. */}
+        {/* Jefes del proyecto: son los únicos que crean tareas, las asignan y
+            aceptan su cumplimiento. Pueden ser varios y conviene que lo sean,
+            porque un jefe nunca aprueba su propia tarea. */}
         <div>
           <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
             <ShieldCheck className="w-3 h-3" />
-            Jefes de proyecto
+            Jefes de proyecto *
           </p>
           <div className="flex flex-wrap gap-2">
-            {leader && (
-              <span
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-violet-500/15 text-violet-300 border border-violet-500/30"
-                title="El líder siempre es jefe del proyecto"
-              >
-                {leader.name || leader.email}
-                <span className="text-violet-500/60 text-[10px]">LÍDER</span>
-              </span>
-            )}
-            {availableUsers.map((u) => {
+            {users.map((u) => {
               const isLeader = leaderIds.includes(u.id)
               return (
                 <button
@@ -272,12 +271,18 @@ export function ProjectForm({
               )
             })}
           </div>
-          {extraLeaders.length === 0 && (
+
+          {leaderIds.length === 0 ? (
+            <p className="text-xs text-red-400 mt-2">
+              Escoge al menos un jefe: sin jefes nadie podría crear tareas en
+              este proyecto.
+            </p>
+          ) : leaderIds.length === 1 ? (
             <p className="text-xs text-amber-500/80 mt-2 leading-relaxed">
               Con un solo jefe, nadie puede aprobar las tareas que él mismo se
               asigne y tendría que firmarlas el dueño. Marca al menos uno más.
             </p>
-          )}
+          ) : null}
         </div>
 
         {/* Miembros seleccionados */}
@@ -302,14 +307,14 @@ export function ProjectForm({
         )}
 
         {/* Picker de miembros: excluye a los jefes, que ya están arriba */}
-        {availableUsers.filter((u) => !leaderIds.includes(u.id)).length > 0 && (
+        {availableMembers.length > 0 && (
           <div>
             <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
               <UserPlus className="w-3 h-3" />
               Agregar miembros
             </p>
             <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
-              {availableUsers.filter((u) => !leaderIds.includes(u.id)).map((u) => {
+              {availableMembers.map((u) => {
                 const isSelected = memberIds.includes(u.id)
                 return (
                   <button
@@ -343,7 +348,12 @@ export function ProjectForm({
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancelar
         </Button>
-        <Button type="submit" variant="primary" isLoading={isSubmitting}>
+        <Button
+          type="submit"
+          variant="primary"
+          isLoading={isSubmitting}
+          disabled={leaderIds.length === 0}
+        >
           {project ? 'Actualizar Proyecto' : 'Crear Proyecto'}
         </Button>
       </div>

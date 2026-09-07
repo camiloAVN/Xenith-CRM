@@ -18,6 +18,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { KanbanColumn } from './KanbanColumn'
 import { TaskCard, TaskCardData } from './TaskCard'
 import { cn } from '@/lib/utils/cn'
+import toast from 'react-hot-toast'
 
 type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'DONE' | 'BLOCKED'
 
@@ -35,7 +36,11 @@ interface KanbanBoardProps {
   projectId: string
   initialTasks: Record<TaskStatus, TaskCardData[]>
   onTaskClick?: (task: TaskCardData) => void
-  onAddTask?: (status: TaskStatus) => void
+  /**
+   * Crear tarea. Solo se ofrece en la columna "Por Hacer": toda tarea nace
+   * ahi y las demas columnas las mueve el flujo de aprobacion.
+   */
+  onAddTask?: () => void
   /**
    * Avisa al padre cuando el tablero se reordena por arrastre. Sin esto el
    * padre conserva la disposición vieja y, al refrescar cualquier otra cosa,
@@ -187,11 +192,23 @@ export function KanbanBoard({
       const payload = COLUMNS.flatMap((s) =>
         next[s].map((task, idx) => ({ id: task.id, order: idx, status: s }))
       )
+      const previous = columns
       fetch(`/api/v1/projects/${projectId}/tasks/reorder`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tasks: payload }),
-      }).catch(console.error)
+      })
+        .then(async (res) => {
+          if (res.ok) return
+          // El servidor rechazo el movimiento (p. ej. un miembro arrastrando
+          // su tarjeta a "Hecho"). Sin revertir, la pantalla mostraria una
+          // columna que la base no tiene.
+          const body = await res.json().catch(() => null)
+          toast.error(body?.error || 'No se pudo mover la tarea')
+          setColumns(previous)
+          onColumnsChange?.(previous)
+        })
+        .catch(console.error)
     },
     [columns, findColumn, projectId, onColumnsChange]
   )
@@ -240,7 +257,7 @@ export function KanbanBoard({
           status={mobileCol}
           tasks={columns[mobileCol]}
           onTaskClick={onTaskClick}
-          onAddTask={onAddTask}
+          onAddTask={mobileCol === 'TODO' ? onAddTask : undefined}
           fullWidth
         />
       </div>
@@ -299,7 +316,7 @@ export function KanbanBoard({
                 status={s}
                 tasks={columns[s]}
                 onTaskClick={onTaskClick}
-                onAddTask={onAddTask}
+                onAddTask={s === 'TODO' ? onAddTask : undefined}
               />
             ))}
           </div>

@@ -193,6 +193,12 @@ export function TaskDetailPanel({
         const updated = await res.json()
         setFullTask((prev) => ({ ...prev!, ...updated }))
         onTaskUpdated?.({ ...fullTask!, ...updated })
+      } else {
+        // Antes fallaba en silencio: el campo quedaba cambiado en pantalla y
+        // sin guardar en la base.
+        const body = await res.json().catch(() => null)
+        toast.error(body?.error || 'No se pudo guardar el cambio')
+        await loadFullTask()
       }
     } finally {
       setIsSaving(false)
@@ -384,10 +390,23 @@ export function TaskDetailPanel({
 
               {/* Fields grid */}
               <div className="grid grid-cols-2 gap-3">
+                {/* Quien no es jefe solo puede arrancar su propia tarea: de
+                    "Por Hacer" a "En Progreso". Las demas columnas las mueve
+                    el flujo de cumplimiento, no una edicion manual. El
+                    servidor lo valida igual; esto evita ofrecer opciones que
+                    van a ser rechazadas. */}
                 <SelectField
                   label="Estado"
                   value={ft.status}
-                  options={STATUS_OPTIONS}
+                  options={
+                    canManageTasks
+                      ? STATUS_OPTIONS
+                      : ft.status === 'TODO'
+                        ? STATUS_OPTIONS.filter((o) =>
+                            o.value === 'TODO' || o.value === 'IN_PROGRESS'
+                          )
+                        : STATUS_OPTIONS.filter((o) => o.value === ft.status)
+                  }
                   onChange={(v) => {
                     setFullTask((p) => ({ ...p!, status: v as TaskDetail['status'] }))
                     updateField('status', v)

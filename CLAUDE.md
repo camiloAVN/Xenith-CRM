@@ -147,7 +147,11 @@ Fully client-side page with three switchable views. All data is fetched from `/a
 
 **Layout rule:** The dashboard `layout.tsx` has `min-w-0 overflow-x-hidden` on the main content wrapper — this is required to prevent Kanban/Gantt from creating a page-level horizontal scrollbar. Do not remove it.
 
-**User assignment:** Task assignee dropdowns always fetch the full `/api/users` list, not just project members. The project form field `assignedTo` is labelled "Líder del Proyecto".
+**User assignment:** El desplegable de asignado de una tarea lista el equipo del proyecto (miembros + jefes), no todos los usuarios: el backend exige que el asignado sea miembro.
+
+**Jefes de proyecto:** el formulario de proyecto tiene un solo selector múltiple de jefes (`leaderIds`). `Project.assignedTo` sigue existiendo porque la columna es obligatoria, pero ya no se escoge aparte: se deriva del primer jefe marcado. Solo los jefes crean tareas, las asignan y aceptan su cumplimiento.
+
+**Estados de la tarea:** toda tarea nace en `TODO`. Quien no es jefe solo puede moverla de `TODO` a `IN_PROGRESS` (validado también en `reorder`, para que arrastrar en el Kanban no se salte la regla). El resto de transiciones las hace el flujo: marcar terminada → `REVIEW`, aceptación → `DONE`, rechazo o reapertura → `IN_PROGRESS`.
 
 ### API Pattern
 
