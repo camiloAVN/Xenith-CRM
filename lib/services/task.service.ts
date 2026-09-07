@@ -133,6 +133,7 @@ export const taskService = {
         valuationStatus: true,
         completionStatus: true,
         pointsValue: true,
+        status: true,
         dueDate: true,
         lateAccruedDays: true,
         lateClockStartedAt: true,
@@ -157,17 +158,33 @@ export const taskService = {
         submittedAt: now,
         lateAccruedDays: Number(task.lateAccruedDays) + closedInterval,
         lateClockStartedAt: null,
+        // La tarjeta se mueve sola a "En Revisión": marcar terminada y dejarla
+        // en la columna anterior obligaba a arrastrarla a mano, y el tablero
+        // dejaba de reflejar que la tarea espera a los jefes.
+        status: 'REVIEW',
+        completed: false,
       },
     })
 
-    await prisma.taskHistory.create({
-      data: {
-        taskId,
-        userId: currentUserId,
-        field: 'completion_status',
-        oldValue: task.completionStatus,
-        newValue: 'SUBMITTED',
-      },
+    await prisma.taskHistory.createMany({
+      data: [
+        {
+          taskId,
+          userId: currentUserId,
+          field: 'completion_status',
+          oldValue: task.completionStatus,
+          newValue: 'SUBMITTED',
+        },
+        ...(task.status !== 'REVIEW'
+          ? [{
+              taskId,
+              userId: currentUserId,
+              field: 'status',
+              oldValue: task.status,
+              newValue: 'REVIEW',
+            }]
+          : []),
+      ],
     }).catch(console.error)
 
     void notificationService.completionSubmitted(taskId)

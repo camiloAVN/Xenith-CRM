@@ -5,6 +5,38 @@ import { projectSchema } from '@/lib/validations/project'
 import { ZodError } from 'zod'
 import { Decimal } from '@prisma/client/runtime/library'
 
+/**
+ * Filas de ProjectMember a partir del formulario.
+ *
+ * Un proyecto puede tener VARIOS jefes: `leaderIds` los lista y el lider
+ * (`assignedTo`) siempre entra ahi, aunque no venga marcado. Quien aparezca a
+ * la vez en jefes y en miembros cuenta como jefe — el rol es un permiso encima
+ * de ser miembro, no una casilla que compita con la otra.
+ */
+function buildMemberRecords(
+  projectId: string,
+  data: { assignedTo: string; leaderIds?: string[]; memberIds?: string[] }
+) {
+  const leaderIds = new Set([data.assignedTo, ...(data.leaderIds ?? [])].filter(Boolean))
+  const developerIds = new Set(
+    (data.memberIds ?? []).filter((id) => id && !leaderIds.has(id))
+  )
+
+  return [
+    ...[...leaderIds].map((userId) => ({
+      projectId,
+      userId,
+      role: 'PROJECT_MANAGER' as const,
+    })),
+    ...[...developerIds].map((userId) => ({
+      projectId,
+      userId,
+      role: 'DEVELOPER' as const,
+    })),
+  ]
+}
+
+
 // GET /api/projects/[id] - Get single project
 export async function GET(
   request: NextRequest,
@@ -110,14 +142,9 @@ export async function PUT(
     })
 
     // Sincronizar miembros si se enviaron
-    if (validatedData.memberIds !== undefined) {
+    if (validatedData.memberIds !== undefined || validatedData.leaderIds !== undefined) {
       await prisma.projectMember.deleteMany({ where: { projectId: id } })
-      const { memberIds = [], assignedTo } = validatedData
-      const uniqueMemberIds = [...new Set(memberIds.filter((uid) => uid !== assignedTo))]
-      const memberRecords = [
-        { projectId: id, userId: assignedTo, role: 'PROJECT_MANAGER' as const },
-        ...uniqueMemberIds.map((userId) => ({ projectId: id, userId, role: 'DEVELOPER' as const })),
-      ]
+      const memberRecords = buildMemberRecords(id, validatedData)
       await prisma.projectMember.createMany({ data: memberRecords, skipDuplicates: true })
     }
 

@@ -6,6 +6,38 @@ import { canCreateProjects } from '@/lib/auth/permissions'
 import { ZodError } from 'zod'
 import { Decimal } from '@prisma/client/runtime/library'
 
+/**
+ * Filas de ProjectMember a partir del formulario.
+ *
+ * Un proyecto puede tener VARIOS jefes: `leaderIds` los lista y el lider
+ * (`assignedTo`) siempre entra ahi, aunque no venga marcado. Quien aparezca a
+ * la vez en jefes y en miembros cuenta como jefe — el rol es un permiso encima
+ * de ser miembro, no una casilla que compita con la otra.
+ */
+function buildMemberRecords(
+  projectId: string,
+  data: { assignedTo: string; leaderIds?: string[]; memberIds?: string[] }
+) {
+  const leaderIds = new Set([data.assignedTo, ...(data.leaderIds ?? [])].filter(Boolean))
+  const developerIds = new Set(
+    (data.memberIds ?? []).filter((id) => id && !leaderIds.has(id))
+  )
+
+  return [
+    ...[...leaderIds].map((userId) => ({
+      projectId,
+      userId,
+      role: 'PROJECT_MANAGER' as const,
+    })),
+    ...[...developerIds].map((userId) => ({
+      projectId,
+      userId,
+      role: 'DEVELOPER' as const,
+    })),
+  ]
+}
+
+
 // GET /api/projects - List all projects with filters
 export async function GET(request: NextRequest) {
   try {
@@ -127,17 +159,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Crear miembros del proyecto
-    const { memberIds = [], assignedTo } = validatedData
-    // IDs únicos: líder como PROJECT_MANAGER + resto como DEVELOPER
-    const uniqueMemberIds = [...new Set(memberIds.filter((id) => id !== assignedTo))]
-    const memberRecords = [
-      { projectId: project.id, userId: assignedTo, role: 'PROJECT_MANAGER' as const },
-      ...uniqueMemberIds.map((userId) => ({
-        projectId: project.id,
-        userId,
-        role: 'DEVELOPER' as const,
-      })),
-    ]
+    const memberRecords = buildMemberRecords(project.id, validatedData)
     if (memberRecords.length > 0) {
       await prisma.projectMember.createMany({ data: memberRecords, skipDuplicates: true })
     }

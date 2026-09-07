@@ -73,6 +73,15 @@ export default function EditProjectPage({
               (projectData?.members ?? [])
                 .map((m: { userId: string }) => m.userId)
             }
+            // Los jefes ya guardados vuelven marcados al editar; sin esto una
+            // edición cualquiera los degradaría a desarrolladores.
+            initialLeaderIds={
+              (projectData?.members ?? [])
+                .filter((m: { role: string }) =>
+                  m.role === 'PROJECT_MANAGER' || m.role === 'ADMIN'
+                )
+                .map((m: { userId: string }) => m.userId)
+            }
             onSubmit={handleSubmit}
             onCancel={handleCancel}
             isSubmitting={isLoading}

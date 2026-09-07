@@ -14,6 +14,9 @@ export const projectSchema = z.object({
   tags: z.array(z.string()).optional(),
   notes: z.string().optional(),
   memberIds: z.array(z.string()).optional(),
+  // Jefes del proyecto ademas del lider. Pueden ser varios: el rol es un
+  // permiso encima de ser miembro, no un puesto unico.
+  leaderIds: z.array(z.string()).optional(),
 })
 
 export type ProjectFormData = z.infer<typeof projectSchema>

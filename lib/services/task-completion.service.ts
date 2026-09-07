@@ -50,6 +50,7 @@ const taskSelect = {
   valuationStatus: true,
   completionStatus: true,
   completionRound: true,
+  status: true,
   pointsValue: true,
   effectivePoints: true,
   submittedAt: true,
@@ -103,6 +104,9 @@ export const taskCompletionService = {
           lastRejectedAt: now,
           // El reloj vuelve a correr desde el rechazo.
           lateClockStartedAt: now,
+          // Sale de "En Revisión": hay trabajo pendiente otra vez.
+          status: 'IN_PROGRESS',
+          completed: false,
         },
       })
 
@@ -114,6 +118,18 @@ export const taskCompletionService = {
             field: 'completion_status',
             oldValue: 'SUBMITTED',
             newValue: 'REJECTED',
+          },
+        })
+        .catch(console.error)
+
+      await prisma.taskHistory
+        .create({
+          data: {
+            taskId,
+            userId: currentUserId,
+            field: 'status',
+            oldValue: task.status,
+            newValue: 'IN_PROGRESS',
           },
         })
         .catch(console.error)
@@ -174,6 +190,9 @@ export const taskCompletionService = {
           effectivePoints: penalty.effectivePoints,
           lateAccruedDays: lateDays,
           lateClockStartedAt: null,
+          // Aceptada = hecha. La tarjeta cae sola en la columna final.
+          status: 'DONE',
+          completed: true,
         },
       })
       // Otra llamada concurrente ya la aceptó: no duplicar el asiento.
@@ -193,14 +212,25 @@ export const taskCompletionService = {
     })
 
     await prisma.taskHistory
-      .create({
-        data: {
-          taskId,
-          userId: actorId ?? (task.assignedTo as string),
-          field: 'completion_status',
-          oldValue: 'SUBMITTED',
-          newValue: 'ACCEPTED',
-        },
+      .createMany({
+        data: [
+          {
+            taskId,
+            userId: actorId ?? (task.assignedTo as string),
+            field: 'completion_status',
+            oldValue: 'SUBMITTED',
+            newValue: 'ACCEPTED',
+          },
+          ...(task.status !== 'DONE'
+            ? [{
+                taskId,
+                userId: actorId ?? (task.assignedTo as string),
+                field: 'status',
+                oldValue: task.status,
+                newValue: 'DONE',
+              }]
+            : []),
+        ],
       })
       .catch(console.error)
 
@@ -246,6 +276,9 @@ export const taskCompletionService = {
           effectivePoints: null,
           // El reloj de retraso vuelve a correr desde la reapertura.
           lateClockStartedAt: now,
+          // Sale de la columna "Hecho": vuelve a haber trabajo.
+          status: 'IN_PROGRESS',
+          completed: false,
         },
       })
       if (written.count === 0) return
