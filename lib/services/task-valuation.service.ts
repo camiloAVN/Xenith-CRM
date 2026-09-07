@@ -14,9 +14,13 @@ import { notificationService } from '@/lib/services/notification.service'
 /**
  * Valoración por puntos: la ventana de votación y su cierre.
  *
- * La ventana se abre UNA vez, al crear la tarea, y cierra seco al vencer. No
- * se extiende ni se reabre: si no se alcanzó el quórum, el valor cae al mínimo
- * del rango.
+ * La ventana se abre UNA vez, al crear la tarea, y cierra por lo que ocurra
+ * primero:
+ *   - votaron todos los elegibles  -> cierra de inmediato con la mediana;
+ *   - se vencieron las 24h         -> mediana si hubo quórum, y si no, el
+ *                                     mínimo del rango (2 por defecto).
+ *
+ * No se extiende ni se reabre.
  */
 
 /** Mediana sin redondear: con número par de votos puede dar 4.5 y así queda. */
@@ -98,11 +102,22 @@ export const taskValuationService = {
     const check = canVoteOnTask(task, userId, eligible, task.votingClosesAt)
     if (!check.ok) throw new TaskPermissionError(check.reason as string)
 
-    return prisma.taskPointVote.upsert({
+    const vote = await prisma.taskPointVote.upsert({
       where: { taskId_userId: { taskId, userId } },
       create: { taskId, userId, value },
       update: { value },
     })
+
+    // Si ya votaron TODOS los que podian votar, no tiene sentido esperar a que
+    // venzan las 24h: el resultado no puede cambiar. La ventana se cierra ya y
+    // la tarea queda con su valor. El plazo solo existe para el caso en que
+    // alguien no vote.
+    const voteCount = await prisma.taskPointVote.count({ where: { taskId } })
+    if (eligible.length > 0 && voteCount >= eligible.length) {
+      await this.settleTask(taskId, { force: true })
+    }
+
+    return vote
   },
 
   /**
@@ -110,7 +125,10 @@ export const taskValuationService = {
    * `valuationStatus: { not: 'VALUED' }` en el UPDATE hace que, si dos lecturas
    * concurrentes intentan cerrar la misma tarea, solo una escriba.
    */
-  async settleTask(taskId: string): Promise<ValuationOutcome | null> {
+  async settleTask(
+    taskId: string,
+    options: { force?: boolean } = {}
+  ): Promise<ValuationOutcome | null> {
     const task = await prisma.task.findUnique({
       where: { id: taskId },
       select: {
@@ -126,7 +144,12 @@ export const taskValuationService = {
     // Solo se liquida una ventana YA VENCIDA. Sin esta guarda, las llamadas
     // preventivas desde la ruta de votos cerrarían cada votación abierta en su
     // primera lectura. `votingClosesAt` nulo = sin ventana, se liquida.
-    if (task.votingClosesAt && task.votingClosesAt > new Date()) return null
+    //
+    // `force` es la excepción: se usa cuando ya votaron todos los elegibles y
+    // esperar al vencimiento no cambiaría el resultado.
+    if (!options.force && task.votingClosesAt && task.votingClosesAt > new Date()) {
+      return null
+    }
 
     const settings = await contributionSettingsService.resolve(task.projectId)
     const [votes, eligible] = await Promise.all([

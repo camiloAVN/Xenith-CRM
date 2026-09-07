@@ -187,8 +187,10 @@ export function TaskVoting({ projectId, taskId, onSettled }: TaskVotingProps) {
             {/* Durante la votación solo se muestra el conteo: destapar quién votó
                 qué anclaría a los que faltan. Los votos se revelan al cerrar. */}
             <p className="text-[11px] text-gray-600 leading-relaxed">
-              Los votos individuales se revelan cuando cierre la votación. Sin
-              quórum, la tarea toma el mínimo ({state.minPoints} puntos).
+              La votación cierra apenas voten los {state.eligibleVoterCount}, o
+              al vencer el plazo. Si nadie vota, la tarea toma el mínimo (
+              {state.minPoints} puntos). Los votos individuales se revelan al
+              cerrar.
             </p>
           </>
         )}

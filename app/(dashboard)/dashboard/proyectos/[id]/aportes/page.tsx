@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { MemberPointsChart } from '@/components/charts/MemberPointsChart'
 import { MonthlyPointsChart } from '@/components/charts/MonthlyPointsChart'
 import { MemberTrendCard, type MemberTrendData } from '@/components/charts/MemberTrendCard'
+import { PointAdjustments } from '@/components/projects/PointAdjustments'
 import { buildColorMap } from '@/lib/utils/chart-palette'
 
 interface Metrics {
@@ -201,6 +202,9 @@ export default function ProjectContributionsPage({
           )}
         </div>
       </div>
+
+      {/* Asignación manual de puntos — el dueño puede repartir a discreción. */}
+      <PointAdjustments projectId={id} onChanged={load} />
 
       {!hasData ? (
         <Card>

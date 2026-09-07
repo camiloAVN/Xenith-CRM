@@ -215,8 +215,9 @@ export default function ProjectDetailPage({
       })
       setSelectedTask((prev) => (prev?.id === updated.id ? { ...prev, ...updated } : prev))
       refreshProgress()
+      loadTasks()
     },
-    [refreshProgress]
+    [refreshProgress, loadTasks]
   )
 
   const handleTaskDeleted = useCallback(
@@ -230,8 +231,9 @@ export default function ProjectDetailPage({
         return next
       })
       refreshProgress()
+      loadTasks()
     },
-    [refreshProgress]
+    [refreshProgress, loadTasks]
   )
 
   const handleAddTask = (status: TaskStatus) => {
@@ -268,6 +270,9 @@ export default function ProjectDetailPage({
         setNewTaskAssignee('')
         setNewTaskDueDate('')
         refreshProgress()
+        // Reconciliar con el servidor: la respuesta de creacion no trae la
+        // penalizacion calculada ni el orden definitivo de la columna.
+        loadTasks()
         toast.success('Tarea creada — votación de puntos abierta')
       } else {
         // Un fallo silencioso aquí dejaba el modal abierto sin explicar nada.
@@ -433,6 +438,7 @@ export default function ProjectDetailPage({
             initialTasks={kanbanBoard}
             onTaskClick={handleTaskClick}
             onAddTask={canManageTasks ? handleAddTask : undefined}
+            onColumnsChange={setKanbanBoard}
           />
         )}
 

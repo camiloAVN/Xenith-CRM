@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db/prisma'
 import { getProjectMemberIds } from '@/lib/auth/permissions'
+import { TaskPermissionError } from '@/lib/services/task.service'
 
 /**
  * Cálculo del porcentaje de aporte y del reparto.
@@ -46,7 +47,81 @@ export interface ProjectContributions {
 /** Redondeo monetario/porcentual a 2 decimales. */
 const round2 = (n: number) => Math.round(n * 100) / 100
 
+export interface AdjustmentRow {
+  id: string
+  points: number
+  note: string | null
+  createdAt: Date
+  user: { id: string; name: string | null; email: string }
+  createdBy: { id: string; name: string | null; email: string } | null
+}
+
 export const contributionService = {
+  /**
+   * Asiento manual del dueño: puntos otorgados (o descontados) a discreción,
+   * fuera del ciclo de tareas.
+   *
+   * Sirve para el back-fill de trabajo previo al sistema y para reconocer
+   * aportes que no encajan en una tarea. Entra al MISMO ledger, así que mueve
+   * los porcentajes igual que cualquier otro punto.
+   *
+   * Se permiten valores negativos: corregir un ajuste de más es agregar el
+   * opuesto, nunca borrar el original — el ledger es append-only.
+   */
+  async createAdjustment(
+    projectId: string,
+    userId: string,
+    points: number,
+    note: string | null,
+    actorId: string
+  ) {
+    if (!Number.isFinite(points) || points === 0) {
+      throw new TaskPermissionError('Los puntos deben ser un número distinto de cero')
+    }
+
+    const member = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    })
+    if (!member) throw new TaskPermissionError('El usuario no existe')
+
+    return prisma.pointLedgerEntry.create({
+      data: {
+        projectId,
+        userId,
+        type: 'ADJUSTMENT',
+        points: Math.round(points * 100) / 100,
+        note,
+        createdById: actorId,
+      },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
+      },
+    })
+  },
+
+  /** Ajustes manuales del proyecto, del más reciente al más antiguo. */
+  async listAdjustments(projectId: string): Promise<AdjustmentRow[]> {
+    const rows = await prisma.pointLedgerEntry.findMany({
+      where: { projectId, type: 'ADJUSTMENT' },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    return rows.map((r) => ({
+      id: r.id,
+      points: Number(r.points),
+      note: r.note,
+      createdAt: r.createdAt,
+      user: r.user,
+      createdBy: r.createdBy,
+    }))
+  },
+
   async getProjectContributions(projectId: string): Promise<ProjectContributions> {
     const [ledgerByUser, income, deductions, currentMemberIds, pending] = await Promise.all([
       prisma.pointLedgerEntry.groupBy({

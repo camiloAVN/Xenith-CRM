@@ -36,15 +36,47 @@ interface KanbanBoardProps {
   initialTasks: Record<TaskStatus, TaskCardData[]>
   onTaskClick?: (task: TaskCardData) => void
   onAddTask?: (status: TaskStatus) => void
+  /**
+   * Avisa al padre cuando el tablero se reordena por arrastre. Sin esto el
+   * padre conserva la disposición vieja y, al refrescar cualquier otra cosa,
+   * revertiría el arrastre en pantalla.
+   */
+  onColumnsChange?: (columns: Record<TaskStatus, TaskCardData[]>) => void
 }
 
-export function KanbanBoard({ projectId, initialTasks, onTaskClick, onAddTask }: KanbanBoardProps) {
+export function KanbanBoard({
+  projectId,
+  initialTasks,
+  onTaskClick,
+  onAddTask,
+  onColumnsChange,
+}: KanbanBoardProps) {
   const [columns, setColumns] = useState<Record<TaskStatus, TaskCardData[]>>(initialTasks)
   const [activeTask, setActiveTask] = useState<TaskCardData | null>(null)
   const [mobileCol, setMobileCol] = useState<TaskStatus>('TODO')
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * El tablero refleja lo que manda el padre: crear una tarea, cambiarle el
+   * estado desde el panel o borrarla tiene que verse al instante.
+   *
+   * Antes `initialTasks` solo servía de valor inicial del useState, así que
+   * cualquier cambio posterior exigía recargar la página.
+   *
+   * Es el patrón de "ajustar el estado cuando cambian las props": se compara
+   * en el render y no en un efecto. Con useEffect habría un render intermedio
+   * pintando datos viejos, y el linter lo marca por las cascadas de render.
+   *
+   * Se salta mientras hay un arrastre en curso: aplicar el estado del padre a
+   * media interacción haría saltar la tarjeta bajo el cursor.
+   */
+  const [syncedFrom, setSyncedFrom] = useState(initialTasks)
+  if (initialTasks !== syncedFrom && !activeTask) {
+    setSyncedFrom(initialTasks)
+    setColumns(initialTasks)
+  }
 
   // Update scroll indicators
   const checkScroll = useCallback(() => {
@@ -134,30 +166,34 @@ export function KanbanBoard({ projectId, initialTasks, onTaskClick, onAddTask }:
         : findColumn(overId)
       if (!src || !dst) return
 
+      // La disposición final se calcula aquí, no dentro de un updater de
+      // setState: notificar al padre desde un updater es un efecto secundario
+      // en medio del procesamiento del estado y React lo castiga con avisos.
+      // `columns` ya trae el movimiento entre columnas que hizo handleDragOver.
+      let next = columns
       if (src === dst) {
-        setColumns((prev) => {
-          const tasks = [...prev[src]]
-          const oldIdx = tasks.findIndex((t) => t.id === activeId)
-          const newIdx = tasks.findIndex((t) => t.id === overId)
-          if (oldIdx === newIdx) return prev
-          return { ...prev, [src]: arrayMove(tasks, oldIdx, newIdx) }
-        })
+        const tasks = [...columns[src]]
+        const oldIdx = tasks.findIndex((t) => t.id === activeId)
+        const newIdx = tasks.findIndex((t) => t.id === overId)
+        if (oldIdx >= 0 && newIdx >= 0 && oldIdx !== newIdx) {
+          next = { ...columns, [src]: arrayMove(tasks, oldIdx, newIdx) }
+        }
       }
 
-      // Send reorder to API using the current state snapshot
-      setColumns((prev) => {
-        const payload = COLUMNS.flatMap((s) =>
-          prev[s].map((task, idx) => ({ id: task.id, order: idx, status: s }))
-        )
-        fetch(`/api/v1/projects/${projectId}/tasks/reorder`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tasks: payload }),
-        }).catch(console.error)
-        return prev
-      })
+      setColumns(next)
+      // El padre necesita la disposición nueva para no pisarla después.
+      onColumnsChange?.(next)
+
+      const payload = COLUMNS.flatMap((s) =>
+        next[s].map((task, idx) => ({ id: task.id, order: idx, status: s }))
+      )
+      fetch(`/api/v1/projects/${projectId}/tasks/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tasks: payload }),
+      }).catch(console.error)
     },
-    [findColumn, projectId]
+    [columns, findColumn, projectId, onColumnsChange]
   )
 
   const totalTasks = COLUMNS.reduce((n, s) => n + columns[s].length, 0)
