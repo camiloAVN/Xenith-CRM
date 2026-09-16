@@ -5,6 +5,11 @@ begin;
 
 alter table evidencias add column if not exists aviso_borrador_en timestamptz;
 
+-- Minutos de anticipación con los que avisa cada recordatorio. Un recordatorio
+-- que llega DESPUÉS de la hora no sirve de nada: llega cuando ya no puedes
+-- hacer nada al respecto.
+alter table recordatorios add column if not exists anticipo_min int not null default 15;
+
 -- ------------------------------------------------------------ utilidades
 
 create or replace function fn_cfg_txt(k text) returns text
@@ -317,12 +322,19 @@ $$;
 -- ------------------------------------------------------------ recordatorios
 
 -- Lo usa el agente de IA. `para` acepta slug, nombre, apodo o 'yo'.
-create or replace function fn_crear_recordatorio(creador_tg bigint, para text, texto text, cuando timestamptz)
+-- La firma cambio (se agrego `anticipo`): sin el drop, `create or replace`
+-- deja la version vieja conviviendo y toda llamada queda ambigua.
+drop function if exists fn_crear_recordatorio(bigint, text, text, timestamptz);
+
+create or replace function fn_crear_recordatorio(
+  creador_tg bigint, para text, texto text, cuando timestamptz, anticipo int default null)
 returns jsonb language plpgsql as $$
 declare
   yo participantes;
   destino participantes;
   r recordatorios;
+  anticipo_real int := greatest(0, coalesce(anticipo, fn_cfg_txt('recordatorio_anticipo_min')::int, 15));
+  primer_aviso timestamptz;
 begin
   select * into yo from participantes where telegram_user_id = creador_tg;
   if yo.id is null then return jsonb_build_object('ok', false, 'error', 'Quien crea el recordatorio no está registrado'); end if;
@@ -333,10 +345,18 @@ begin
      limit 1;
   end if;
   if destino.id is null then return jsonb_build_object('ok', false, 'error', 'No encontré a ' || para); end if;
-  insert into recordatorios (creado_por, para, texto, vence_en, intervalo_min, proximo_aviso)
-  values (yo.id, destino.id, texto, cuando, fn_cfg_txt('recordatorio_intervalo_min')::int, cuando)
+
+  -- Si faltan menos minutos que la anticipación, el aviso sale ya: mejor
+  -- "es en 5 minutos" que un recordatorio que nunca alcanzó a avisar.
+  primer_aviso := greatest(cuando - make_interval(mins => anticipo_real), now());
+
+  insert into recordatorios (creado_por, para, texto, vence_en, intervalo_min, anticipo_min, proximo_aviso)
+  values (yo.id, destino.id, texto, cuando, fn_cfg_txt('recordatorio_intervalo_min')::int,
+          anticipo_real, primer_aviso)
   returning * into r;
   return jsonb_build_object('ok', true, 'id', r.id, 'para', fn_nombre(destino),
+    'anticipo_min', anticipo_real,
+    'primer_aviso', to_char(primer_aviso at time zone 'America/Bogota', 'YYYY-MM-DD HH24:MI'),
     'cuando', to_char(cuando at time zone 'America/Bogota', 'YYYY-MM-DD HH24:MI'));
 end $$;
 
@@ -645,14 +665,23 @@ begin
      for update of rc
   loop
     acts := acts || fn_send(r.telegram_user_id,
-      case when r.avisos_enviados = 0 then '⏰ <b>Recordatorio</b>' else '⏰ <b>Recordatorio</b> (sigue pendiente)' end
+      case
+        -- Aviso anticipado: todavía hay tiempo de hacerlo.
+        when r.vence_en > now() then '⏰ <b>En ' || greatest(1, round(extract(epoch from r.vence_en - now()) / 60))
+          || ' min</b> · ' || to_char(r.vence_en at time zone 'America/Bogota', 'HH12:MI am')
+        when r.avisos_enviados = 0 then '⏰ <b>Ahora</b>'
+        else '⏰ <b>Sigue pendiente</b>' end
       || E'\n' || fn_html(r.texto)
       || case when r.creado_por is distinct from r.para
            then E'\n<i>De ' || fn_html(coalesce(r.creador_apodo, split_part(r.creador_nombre, ' ', 1))) || '</i>' else '' end,
       jsonb_build_object('inline_keyboard', jsonb_build_array(jsonb_build_array(fn_boton('✅ Hecho', 'rh:' || r.id)))));
     update recordatorios
        set avisos_enviados = avisos_enviados + 1,
-           proximo_aviso = fn_siguiente_aviso(now() + make_interval(mins => intervalo_min))
+           -- Tras el aviso anticipado, el siguiente es la HORA EXACTA; de ahí
+           -- en adelante insiste cada `intervalo_min`.
+           proximo_aviso = fn_siguiente_aviso(
+             case when vence_en > now() then vence_en
+                  else now() + make_interval(mins => intervalo_min) end)
      where id = r.id;
   end loop;
 

@@ -39,6 +39,7 @@ insert into config (clave, valor, descripcion) values
   ('ia_max_caracteres', '600', 'Largo máximo de un mensaje para la IA'),
   ('ia_memoria_min', '30', 'Minutos que el agente recuerda la conversación'),
   ('ia_memoria_turnos', '4', 'Mensajes previos que se le mandan al modelo'),
+  ('recordatorio_anticipo_min', '15', 'Minutos de anticipación del primer aviso de un recordatorio'),
   ('xenith_url', '"https://xenith.com.co"', 'URL del CRM para los enlaces'),
   ('xenith_sondeo_desde', 'null', 'Última consulta de novedades de Xenith (la maneja fn_xenith_novedades)')
 on conflict (clave) do nothing;
@@ -172,6 +173,9 @@ language sql stable as $$
     join participantes p on lower(p.xenith_email) = lower(x ->> 'email')
 $$;
 
+-- Firma vieja (payload, chat bigint) reemplazada por (payload, params jsonb).
+drop function if exists fn_xenith_tareas_de(jsonb, bigint);
+
 -- /tareas, /equipo o el agente. `params` trae chat_id y, según el caso,
 -- `email` + `de` (pendientes de otra persona) o `modo = equipo`.
 create or replace function fn_xenith_tareas_de(payload jsonb, params jsonb) returns jsonb
@@ -271,7 +275,9 @@ end $$;
 create or replace function fn_texto_recordatorios(pid int) returns text
 language sql stable as $$
   select coalesce(E'⏰ <b>Recordatorios pendientes</b>\n' || string_agg(
-           '#' || r.id || ' · ' || fn_fecha_corta(r.vence_en) || ' — ' || fn_html(r.texto)
+           '#' || r.id || ' · ' || fn_fecha_corta(r.vence_en)
+           || case when r.anticipo_min > 0 then ' <i>(aviso ' || r.anticipo_min || ' min antes)</i>' else '' end
+           || ' — ' || fn_html(r.texto)
            || case when r.para <> pid then ' <i>(para ' || fn_html(fn_nombre(d)) || ')</i>'
                    when r.creado_por is distinct from pid then ' <i>(de ' || fn_html(fn_nombre(c)) || ')</i>'
                    else '' end,
@@ -365,6 +371,8 @@ begin
     || 'Reglas duras:' || E'\n'
     || '- Usa las herramientas para actuar o consultar; nunca inventes tareas, metas ni recordatorios.' || E'\n'
     || '- Para crear un recordatorio necesitas qué y cuándo. Si falta la hora, pregunta en UNA frase.' || E'\n'
+    || '- En fecha_hora va LA HORA DEL EVENTO, no la del aviso: el bot avisa 15 min antes por defecto. '
+    || 'Si piden otra anticipación ("avísame una hora antes"), usa avisar_antes_min.' || E'\n'
     || '- Las fechas relativas (mañana, el viernes, en 2 horas) se calculan desde la fecha actual que llega en cada mensaje, hora de Bogotá.' || E'\n'
     || '- Si preguntan por otra persona del equipo, usa ver_tareas_xenith con esa persona.' || E'\n'
     || '- Texto plano, sin markdown, sin emojis de más (uno basta).' || E'\n'
@@ -378,7 +386,8 @@ begin
         'required', jsonb_build_array('texto', 'fecha_hora', 'para'),
         'properties', jsonb_build_object(
           'texto', jsonb_build_object('type', 'string', 'description', 'Qué hay que recordar, corto y claro.'),
-          'fecha_hora', jsonb_build_object('type', 'string', 'description', 'Fecha y hora en Bogotá, formato YYYY-MM-DD HH:MM (24 h).'),
+          'fecha_hora', jsonb_build_object('type', 'string', 'description', 'LA HORA DEL EVENTO en Bogotá, formato YYYY-MM-DD HH:MM (24 h). El aviso sale antes, no a esta hora.'),
+          'avisar_antes_min', jsonb_build_object('type', 'integer', 'description', 'Minutos de anticipación del aviso. Por defecto 15; súbelo si piden "avísame media hora antes".'),
           'para', jsonb_build_object('type', 'string', 'enum', destinos, 'description', '"yo" si es para quien escribe.')))),
     jsonb_build_object('name', 'ver_recordatorios',
       'description', 'Lista los recordatorios pendientes de quien escribe (con su número #id).',
@@ -466,12 +475,14 @@ begin
     elsif cuando > now() + interval '400 days' then
       respuesta := 'Solo programo recordatorios para el próximo año como mucho.';
     else
-      res := fn_crear_recordatorio(yo.telegram_user_id, coalesce(inp ->> 'para', 'yo'), left(trim(inp ->> 'texto'), 300), cuando);
+      res := fn_crear_recordatorio(yo.telegram_user_id, coalesce(inp ->> 'para', 'yo'),
+        left(trim(inp ->> 'texto'), 300), cuando, (inp ->> 'avisar_antes_min')::int);
       if (res ->> 'ok')::boolean then
         select * into otro from participantes p where p.id = (select para from recordatorios where id = (res ->> 'id')::int);
         respuesta := '⏰ Listo (#' || (res ->> 'id') || '): '
-          || case when otro.id = yo.id then 'te recuerdo' else 'le recuerdo a ' || fn_html(fn_nombre(otro)) end
-          || ' «' || fn_html(left(trim(inp ->> 'texto'), 300)) || '» el ' || fn_fecha_corta(cuando) || '.'
+          || case when otro.id = yo.id then 'te aviso' else 'le aviso a ' || fn_html(fn_nombre(otro)) end
+          || ' ' || (res ->> 'anticipo_min') || ' min antes de «'
+          || fn_html(left(trim(inp ->> 'texto'), 300)) || '» (' || fn_fecha_corta(cuando) || ').'
           || case when otro.id <> yo.id and otro.telegram_user_id is null
                   then E'\n⚠️ ' || fn_html(fn_nombre(otro)) || ' aún no se ha registrado en el bot, así que no le llegará.' else '' end;
       else
@@ -490,12 +501,18 @@ begin
       update recordatorios
          set texto = coalesce(left(nullif(trim(inp ->> 'texto'), ''), 300), texto),
              vence_en = coalesce(cuando, vence_en),
-             proximo_aviso = coalesce(cuando, proximo_aviso),
+             anticipo_min = coalesce((inp ->> 'avisar_antes_min')::int, anticipo_min),
+             -- El aviso vuelve a calcularse con la anticipación, no con la hora.
+             proximo_aviso = greatest(
+               coalesce(cuando, vence_en)
+                 - make_interval(mins => coalesce((inp ->> 'avisar_antes_min')::int, anticipo_min)),
+               now()),
              avisos_enviados = case when cuando is not null then 0 else avisos_enviados end
        where id = (inp ->> 'id')::int and estado = 'PENDIENTE' and yo.id in (para, creado_por)
       returning * into r;
       respuesta := case when r.id is null then 'No encontré ese recordatorio entre tus pendientes.'
-                        else '✏️ Cambiado (#' || r.id || '): «' || fn_html(r.texto) || '» el ' || fn_fecha_corta(r.vence_en) || '.' end;
+                        else '✏️ Cambiado (#' || r.id || '): «' || fn_html(r.texto) || '», aviso '
+                             || r.anticipo_min || ' min antes de ' || fn_fecha_corta(r.vence_en) || '.' end;
     end if;
 
   elsif herr = 'cancelar_recordatorio' then
