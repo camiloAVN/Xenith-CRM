@@ -26,13 +26,14 @@ export async function GET(
       return NextResponse.json({ error: 'No perteneces a este proyecto' }, { status: 403 })
     }
 
-    const [sprints, active] = await Promise.all([
+    const [sprints, active, counts] = await Promise.all([
       sprintService.list(id),
       sprintService.getActive(id),
+      sprintService.getTaskCounts(id),
     ])
     const capacities = active ? await sprintService.getCapacities(active.id) : []
 
-    return NextResponse.json({ sprints, active, capacities, permissions: perms })
+    return NextResponse.json({ sprints, active, capacities, counts, permissions: perms })
   } catch (error) {
     console.error('Error al obtener sprints:', error)
     return NextResponse.json({ error: 'Error al obtener los sprints' }, { status: 500 })

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CalendarRange, Play, Flag, Plus, Gauge } from 'lucide-react'
+import { CalendarRange, Play, Flag, Plus, Gauge, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils/cn'
 
@@ -12,6 +12,7 @@ export interface SprintRow {
   startDate: string
   endDate: string
   status: 'PLANNED' | 'ACTIVE' | 'CLOSED'
+  _count?: { tasks: number }
 }
 
 interface CapacityRow {
@@ -26,8 +27,8 @@ interface CapacityRow {
 interface SprintBarProps {
   projectId: string
   canManage: boolean
-  /** Filtro vigente del tablero: un id de sprint, 'backlog' o 'all'. */
-  scope: string
+  /** Filtro vigente del tablero: un id de sprint, 'backlog' o 'all'. null = sin decidir. */
+  scope: string | null
   onScopeChange: (scope: string) => void
   /** Avisa al padre para recargar tareas tras arrancar o cerrar un sprint. */
   onChanged?: () => void
@@ -56,6 +57,7 @@ export function SprintBar({ projectId, canManage, scope, onScopeChange, onChange
   const [sprints, setSprints] = useState<SprintRow[]>([])
   const [active, setActive] = useState<SprintRow | null>(null)
   const [capacities, setCapacities] = useState<CapacityRow[]>([])
+  const [counts, setCounts] = useState<{ total: number; backlog: number }>({ total: 0, backlog: 0 })
   const [isLoading, setIsLoading] = useState(true)
   const [isBusy, setIsBusy] = useState(false)
   // Solo la PRIMERA carga mueve el alcance del tablero al sprint activo;
@@ -72,9 +74,12 @@ export function SprintBar({ projectId, canManage, scope, onScopeChange, onChange
         setSprints(data.sprints ?? [])
         setActive(data.active ?? null)
         setCapacities(data.capacities ?? [])
+        setCounts(data.counts ?? { total: 0, backlog: 0 })
         if (!scopeInitialized.current) {
           scopeInitialized.current = true
-          if (data.active) onScopeChange(data.active.id)
+          // Siempre se responde algo: la página no pide tareas hasta saber qué
+          // mostrar, así que un silencio aquí la dejaría con el tablero vacío.
+          onScopeChange(data.active ? data.active.id : 'all')
         }
       }
     } finally {
@@ -139,6 +144,13 @@ export function SprintBar({ projectId, canManage, scope, onScopeChange, onChange
     return <div className="h-14 rounded-xl border border-gray-800 bg-gray-900/40 animate-pulse" />
   }
 
+  const shown =
+    scope === 'backlog'
+      ? counts.backlog
+      : scope && scope !== 'all'
+        ? sprints.find((s) => s.id === scope)?._count?.tasks ?? 0
+        : counts.total
+  const hidden = Math.max(0, counts.total - shown)
   const left = active ? daysLeft(active.endDate) : 0
   const totalCommitted = capacities.reduce((sum, c) => sum + c.committed, 0)
   const totalAccepted = capacities.reduce((sum, c) => sum + c.accepted, 0)
@@ -173,19 +185,24 @@ export function SprintBar({ projectId, canManage, scope, onScopeChange, onChange
           {/* El alcance del tablero: el sprint corriendo, lo no comprometido, o todo. */}
           <select
             id="sprint-scope"
-            value={scope}
+            value={scope ?? 'all'}
             onChange={(e) => onScopeChange(e.target.value)}
             className="h-8 rounded-lg bg-gray-800 border border-gray-700 text-xs text-gray-200 px-2"
           >
-            {active && <option value={active.id}>Sprint activo</option>}
-            <option value="backlog">Backlog</option>
-            <option value="all">Todas</option>
+            {/* Con el conteo al lado, un tablero filtrado ya no parece haber
+                perdido tareas: se ve dónde están las que no salen. */}
+            {active && (
+              <option value={active.id}>
+                Sprint activo ({active._count?.tasks ?? 0})
+              </option>
+            )}
+            <option value="backlog">Backlog ({counts.backlog})</option>
+            <option value="all">Todas ({counts.total})</option>
             {sprints
               .filter((s) => s.id !== active?.id)
               .map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name}
-                  {s.status === 'CLOSED' ? ' (cerrado)' : ''}
+                  {s.name} ({s._count?.tasks ?? 0}){s.status === 'CLOSED' ? ' · cerrado' : ''}
                 </option>
               ))}
           </select>
@@ -229,6 +246,23 @@ export function SprintBar({ projectId, canManage, scope, onScopeChange, onChange
           )}
         </div>
       </div>
+
+      {/* Aviso explícito cuando el tablero no está mostrando todo. */}
+      {scope && scope !== 'all' && hidden > 0 && (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-gray-800 bg-amber-500/5">
+          <EyeOff className="w-3.5 h-3.5 text-amber-400" />
+          <span className="text-xs text-amber-300/90">
+            {hidden} tarea{hidden === 1 ? '' : 's'} del proyecto no {hidden === 1 ? 'está' : 'están'} en{' '}
+            {scope === 'backlog' ? 'el backlog' : 'este sprint'}, así que no {hidden === 1 ? 'aparece' : 'aparecen'} en el tablero.
+          </span>
+          <button
+            onClick={() => onScopeChange('all')}
+            className="text-xs text-amber-200 underline underline-offset-2 hover:text-amber-100"
+          >
+            Ver todas
+          </button>
+        </div>
+      )}
 
       {active && capacities.length > 0 && (
         <div className="px-4 py-3">

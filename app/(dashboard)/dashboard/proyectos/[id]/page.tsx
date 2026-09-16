@@ -119,9 +119,12 @@ export default function ProjectDetailPage({
   // Se incrementa en cada cambio de tarea para que el reparto se recalcule:
   // aceptar o reabrir una tarea mueve los porcentajes de todo el equipo.
   const [contributionsKey, setContributionsKey] = useState(0)
-  // Alcance del tablero: un id de sprint, 'backlog' o 'all'. La barra lo pone
-  // en el sprint activo al abrir el proyecto.
-  const [sprintScope, setSprintScope] = useState('all')
+  // Alcance del tablero: un id de sprint, 'backlog' o 'all'. Arranca en null
+  // (todavía no se sabe si hay sprint activo) y la barra lo fija al cargar.
+  // Mientras sea null NO se piden tareas: si se pidieran, el tablero mostraría
+  // todo y un instante después se filtraría solo, que es justo el parpadeo que
+  // hacía "desaparecer" una tarea recién vista.
+  const [sprintScope, setSprintScope] = useState<string | null>(null)
 
   // Fetch project and initial data
   const loadProject = useCallback(async () => {
@@ -143,6 +146,7 @@ export default function ProjectDetailPage({
   }, [id])
 
   const loadTasks = useCallback(async () => {
+    if (sprintScope === null) return
     try {
       const params = new URLSearchParams()
       if (filters.search) params.set('search', filters.search)
@@ -267,7 +271,8 @@ export default function ProjectDetailPage({
           dueDate: newTaskDueDate || null,
           // Al crear desde el tablero, la tarea entra al sprint que se está
           // mirando; desde el backlog o desde "todas", nace sin comprometer.
-          sprintId: sprintScope !== 'all' && sprintScope !== 'backlog' ? sprintScope : null,
+          sprintId:
+            sprintScope && sprintScope !== 'all' && sprintScope !== 'backlog' ? sprintScope : null,
         }),
       })
       if (res.ok) {
@@ -431,7 +436,7 @@ export default function ProjectDetailPage({
         </div>
       </div>
 
-      {/* ---- Sprint: la caja de tiempo y la capacidad de cada quien ---- */}
+      {/* ---- Sprint: la caja de tiempo, la capacidad y qué parte del tablero se ve ---- */}
       <SprintBar
         projectId={id}
         canManage={canManageTasks}

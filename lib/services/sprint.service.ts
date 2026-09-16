@@ -55,6 +55,21 @@ export const sprintService = {
     })
   },
 
+  /**
+   * Cuántas tareas hay en cada sitio: en el backlog y en total.
+   *
+   * Sin esto el tablero filtrado por sprint parece haber perdido tareas: el
+   * contador del proyecto dice 4 y en pantalla salen 3, sin pista de dónde
+   * está la cuarta.
+   */
+  async getTaskCounts(projectId: string) {
+    const [total, backlog] = await Promise.all([
+      prisma.task.count({ where: { projectId } }),
+      prisma.task.count({ where: { projectId, sprintId: null } }),
+    ])
+    return { total, backlog }
+  },
+
   async getActive(projectId: string) {
     return prisma.sprint.findFirst({
       where: { projectId, status: 'ACTIVE' },
