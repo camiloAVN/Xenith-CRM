@@ -166,7 +166,10 @@ language sql stable as $$
               then ' 😴' else '' end,
       E'\n' order by p.id nulls last), E'\nNadie tiene nada. Sospechoso.')
     from jsonb_array_elements(coalesce(payload -> 'users', '[]')) x
-    left join participantes p on lower(p.xenith_email) = lower(x ->> 'email')
+    -- JOIN, no LEFT JOIN: en Xenith puede haber más usuarios (equipo ampliado)
+    -- que sí reciben correos pero NO están en el bot. Aquí solo salen los tres
+    -- del reto; los demás no aparecen ni en /equipo ni en ningún aviso.
+    join participantes p on lower(p.xenith_email) = lower(x ->> 'email')
 $$;
 
 -- /tareas, /equipo o el agente. `params` trae chat_id y, según el caso,
