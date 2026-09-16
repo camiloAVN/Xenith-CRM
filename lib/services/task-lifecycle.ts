@@ -86,28 +86,58 @@ async function getOwnerIds(): Promise<string[]> {
 }
 
 /**
- * Jefes que deben aprobar el cumplimiento: TODOS los del proyecto menos el
- * asignado. Un jefe nunca firma su propia tarea.
+ * Quién tiene que firmar el cumplimiento de una tarea.
  *
- *   3 jefes, tarea de uno de ellos   -> firman los otros 2
- *   2 jefes, tarea de un miembro     -> firman los 2
- *   2 jefes, tarea de un jefe        -> firma solo el otro
- *   1 jefe,  tarea de ese jefe       -> no queda nadie: firma el dueño
+ * Hay dos modos, y la diferencia importa:
  *
- * El último caso necesita el respaldo del dueño porque la regla pide mínimo 1
- * aprobador; sin él la tarea quedaría bloqueada para siempre.
+ *   - `all`: firman TODOS los jefes del proyecto menos el asignado. Es el caso
+ *     normal; un jefe nunca firma su propia tarea.
+ *   - `any`: basta UNA firma de cualquier miembro del equipo. Solo aplica
+ *     cuando el asignado es el único jefe del proyecto.
+ *
+ *   3 jefes, tarea de uno de ellos   -> all: firman los otros 2
+ *   2 jefes, tarea de un miembro     -> all: firman los 2
+ *   2 jefes, tarea de un jefe        -> all: firma solo el otro
+ *   1 jefe,  tarea de ese jefe       -> any: firma cualquier otro del equipo
+ *
+ * El último caso es el que antes dejaba la tarea colgada: sin jefes disponibles
+ * la lista quedaba vacía, `tryFinalizeAcceptance` se rendía y los puntos nunca
+ * se acreditaban. El trabajo del único jefe sí cuenta, pero alguien más tiene
+ * que darlo por bueno: nadie se firma a sí mismo.
  */
+export type ApprovalMode = 'all' | 'any'
+
+export interface ApprovalRequirement {
+  mode: ApprovalMode
+  userIds: string[]
+}
+
+export async function getApprovalRequirement(
+  projectId: string,
+  assigneeId: string | null
+): Promise<ApprovalRequirement> {
+  const leads = await getProjectLeadIds(projectId)
+  const otherLeads = leads.filter((id) => id !== assigneeId)
+
+  if (otherLeads.length > 0) return { mode: 'all', userIds: otherLeads }
+
+  // El asignado es el único jefe: lo valida cualquiera del equipo.
+  const members = await getProjectMemberIds(projectId)
+  const otherMembers = members.filter((id) => id !== assigneeId)
+  if (otherMembers.length > 0) return { mode: 'any', userIds: otherMembers }
+
+  // Proyecto de una sola persona: solo queda el respaldo del dueño.
+  const owners = await getOwnerIds()
+  return { mode: 'any', userIds: owners.filter((id) => id !== assigneeId) }
+}
+
+/** Quiénes pueden firmar, sin importar el modo. */
 export async function getRequiredApproverIds(
   projectId: string,
   assigneeId: string | null
 ): Promise<string[]> {
-  const leads = await getProjectLeadIds(projectId)
-  const required = leads.filter((id) => id !== assigneeId)
-
-  if (required.length > 0) return required
-
-  const owners = await getOwnerIds()
-  return owners.filter((id) => id !== assigneeId)
+  const { userIds } = await getApprovalRequirement(projectId, assigneeId)
+  return userIds
 }
 
 /** El asignado marca la tarea como terminada. */
@@ -130,7 +160,7 @@ export function canSubmitCompletion(
   return OK
 }
 
-/** Un jefe aprueba o rechaza un cumplimiento pendiente. */
+/** Quien esté en la lista de firmantes aprueba o rechaza un cumplimiento. */
 export function canReviewCompletion(
   task: TaskLifecycleSnapshot,
   userId: string,
@@ -143,7 +173,7 @@ export function canReviewCompletion(
     return deny('No puedes aprobar tu propia tarea')
   }
   if (!requiredApproverIds.includes(userId)) {
-    return deny('Solo los jefes del proyecto pueden aceptar el cumplimiento')
+    return deny('No te toca revisar esta tarea')
   }
   return OK
 }

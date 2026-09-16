@@ -140,7 +140,21 @@ Ser jefe es un **permiso encima de ser miembro**, no un rol paralelo: un jefe ta
 
 Dos detalles que hay que respetar:
 - `Project.assignedTo` **cuenta como jefe** aunque no tenga fila en `ProjectMember` (proyectos creados antes de esa tabla se quedarían sin ningún jefe).
-- El **dueño NO entra en el quórum de aprobación** por ser dueño: `getProjectLeadIds()` devuelve solo jefes reales. Si lo incluyera, ninguna tarea podría aceptarse sin su firma en proyectos donde ni participa. La excepción es el respaldo: si no queda ningún aprobador posible (un solo jefe que se autoasigna), firma el dueño.
+- El **dueño NO entra en el quórum de aprobación** por ser dueño: `getProjectLeadIds()` devuelve solo jefes reales. Si lo incluyera, ninguna tarea podría aceptarse sin su firma en proyectos donde ni participa.
+
+### Quién firma una tarea (`getApprovalRequirement`)
+
+Devuelve `{ mode, userIds }` y el modo cambia la regla:
+
+| Caso | Modo | Firman |
+|---|---|---|
+| 3 jefes, tarea de uno de ellos | `all` | los otros 2 |
+| 2 jefes, tarea de un miembro | `all` | los 2 |
+| 2 jefes, tarea de un jefe | `all` | solo el otro jefe |
+| **1 jefe, tarea de ese mismo jefe** | **`any`** | **cualquier miembro del equipo, basta UNA firma** |
+| proyecto de una sola persona | `any` | el dueño (respaldo) |
+
+**El caso `any` existía como bug**: con un solo jefe que se autoasignaba, la lista de aprobadores quedaba vacía, `tryFinalizeAcceptance()` se rendía y la tarea se quedaba en SUBMITTED sin acreditar nunca los puntos —la tarjeta decía que no hacía falta revisión, pero el ledger nunca recibía el asiento—. Ahora el trabajo del jefe único sí cuenta, pero lo tiene que dar por bueno alguien más: **nadie firma su propia tarea**, eso sigue intacto.
 
 `User.canCreateProjects` (default `false`) permite delegar la creación de proyectos en un ADMIN; solo el dueño lo otorga, desde `/dashboard/usuarios`.
 
@@ -160,12 +174,12 @@ Jefe crea la tarea   → status TODO · VOTING (ventana abierta) · reloj de ret
 Asignado arranca     → IN_PROGRESS         (único movimiento manual permitido a un no-jefe)
 Votación cierra      → VALUED + pointsValue (mediana)
 Asignado termina     → REVIEW · SUBMITTED · reloj de retraso SE PAUSA · correo a los jefes
-Jefes aceptan        → DONE · ACCEPTED · asiento en el ledger · correo al asignado
-Un jefe rechaza      → IN_PROGRESS · PENDING · completionRound++ · reloj REANUDA
+Firman los que toca  → DONE · ACCEPTED · asiento en el ledger · correo al asignado
+Un firmante rechaza  → IN_PROGRESS · PENDING · completionRound++ · −25 % al aceptar
 Se reabre aceptada   → IN_PROGRESS · asiento negativo TASK_REVERTED
 ```
 
-**La aceptación exige DOS condiciones independientes:** todas las aprobaciones de la ronda actual **y** valoración cerrada. Por eso `tryFinalizeAcceptance()` se dispara **desde dos lados** — al registrarse la última aprobación y al cerrarse la votación. Sin eso, una tarea terminada y aprobada en 2 horas se acreditaría con el mínimo del rango antes de que el equipo alcance a votar.
+**La aceptación exige DOS condiciones independientes:** las firmas que pida el modo (`all` = todas; `any` = una) en la ronda actual **y** valoración cerrada. Por eso `tryFinalizeAcceptance()` se dispara **desde dos lados** — al registrarse la última aprobación y al cerrarse la votación. Sin eso, una tarea terminada y aprobada en 2 horas se acreditaría con el mínimo del rango antes de que el equipo alcance a votar.
 
 ### Votación
 
@@ -376,6 +390,7 @@ Reto personal de un año (**17-sep-2026 → 17-sep-2027**). Cada uno tiene metas
 - **Grupales:** 30 dominadas, salsa y curso de comunicación = `GRUPAL_INDIVIDUAL` (cada uno la cumple); 200k seguidores de Instagram y 3 ventas en cada línea (oaxis, GA-IA, EDGE, Vector) = `GRUPAL_COLECTIVA`.
 - **Programado:** cada 15 min (auto-aprobación, borradores olvidados, recordatorios), 12/15/18/21 h (quién no ha subido evidencia hoy; miércoles 12 h pregunta por la meta más abandonada), domingo 19 h (resumen semanal). Los avisos del reto no salen antes del 17-sep-2026.
 - **Recordatorios personales:** por privado, insisten cada 3 h fuera de 22–7 h, botón ✅ Hecho. Se crean hablándole normal al bot por privado (lo resuelve el agente de IA) o se consultan con `/recordatorios`.
+- **Personalidad:** el bot habla como colombiano callejero y mamagallista —grosero y burlón, pero con la pereza y el incumplimiento, nunca con la persona— y **responde corto** (1–2 frases). Vive en el prompt de `fn_agente_preparar`; los textos de plantilla (listas, tarjetas) siguen siendo neutros y legibles.
 
 ### Chat privado: agente de IA + tareas de Xenith
 
@@ -384,8 +399,8 @@ Por privado el bot es asistente personal de cada quien. Tres capacidades y nada 
 - **Un solo llamado al modelo por mensaje.** `fn_agente_preparar` arma el body (system + memoria corta + 6 herramientas), n8n lo manda a `api.anthropic.com/v1/messages` y `fn_agente_responder` ejecuta la herramienta elegida y arma la respuesta **con plantillas SQL**. No hay bucle de agente ni segunda llamada: el modelo elige la acción, el texto lo pone la base.
 - **Modelo `claude-haiku-4-5`** ($1 / $5 por millón de tokens). ~US$0,002 por mensaje.
 - **Límites (todos en `config`, editables sin tocar código):** `ia_mensajes_dia` 25 por persona, `ia_tope_mes_usd` 3 sumando a los tres (al llegar la IA se apaga sola hasta el mes siguiente), `ia_max_tokens` 350, `ia_max_caracteres` 600, memoria de 30 min / 4 turnos (`chat_ia`, se purga a los 2 días). Cada llamada queda en `uso_ia` con tokens y costo; `/uso` lo muestra.
-- **Los comandos no cuestan:** `/tareas`, `/recordatorios`, `/uso`, `/metas`, `/avance`. Si se piden en el grupo, la respuesta sale por privado.
-- **Aislamiento:** el correo de Xenith sale de `participantes.xenith_email` (nunca del modelo), y `fn_xenith_usuario` solo entrega el bloque cuyo `email` coincide. Nadie ve las tareas de otro.
+- **Los comandos no cuestan:** `/tareas`, `/equipo`, `/recordatorios`, `/uso`, `/metas`, `/avance`. Si se piden en el grupo, la respuesta sale por privado.
+- **Consultar a otro sí se puede; que se lo manden solo, no.** Cualquiera puede preguntar «¿David ya terminó?» o pedir `/equipo`: el modelo solo puede NOMBRAR a alguien del equipo y el correo lo resuelve la tabla `participantes` (`ver_tareas_xenith` con `persona`). Lo que nunca se mezcla es lo que el bot **manda por iniciativa propia** —resumen de las 7 am y avisos cada 15 min—: eso siempre es solo lo tuyo, cruzado por `xenith_email`.
 - **Tope de gasto real:** el de la consola de Anthropic. El de `config` es el freno del bot.
 
 ### Arquitectura

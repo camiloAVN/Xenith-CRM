@@ -153,15 +153,52 @@ language sql stable as $$
    limit 1
 $$;
 
--- /tareas o el agente: la respuesta del endpoint filtrado por el correo de quien pregunta
-create or replace function fn_xenith_tareas_de(payload jsonb, chat bigint) returns jsonb
+-- Cómo va el equipo: una línea por persona con lo que tiene encima.
+-- El detalle de cada quien se pide aparte; esto es el vistazo rápido.
+create or replace function fn_texto_equipo(payload jsonb) returns text
+language sql stable as $$
+  select '👥 <b>Cómo va el equipo en Xenith</b>' || coalesce(E'\n' || string_agg(
+      '• <b>' || fn_html(coalesce(fn_nombre(p), split_part(x ->> 'email', '@', 1))) || '</b> — '
+      || jsonb_array_length(x -> 'asignadas') || ' por hacer · '
+      || jsonb_array_length(x -> 'enRevision') || ' en revisión · '
+      || jsonb_array_length(x -> 'porAprobar') || ' por aprobar'
+      || case when jsonb_array_length(x -> 'asignadas') + jsonb_array_length(x -> 'enRevision') = 0
+              then ' 😴' else '' end,
+      E'\n' order by p.id nulls last), E'\nNadie tiene nada. Sospechoso.')
+    from jsonb_array_elements(coalesce(payload -> 'users', '[]')) x
+    left join participantes p on lower(p.xenith_email) = lower(x ->> 'email')
+$$;
+
+-- /tareas, /equipo o el agente. `params` trae chat_id y, según el caso,
+-- `email` + `de` (pendientes de otra persona) o `modo = equipo`.
+create or replace function fn_xenith_tareas_de(payload jsonb, params jsonb) returns jsonb
 language plpgsql stable as $$
 declare
+  chat bigint := (params ->> 'chat_id')::bigint;
   p participantes;
+  u jsonb;
 begin
   if payload -> 'users' is null then
     return jsonb_build_array(fn_send(chat, '⚠️ No pude conectar con Xenith. Intenta en un rato.'));
   end if;
+
+  if params ->> 'modo' = 'equipo' then
+    return jsonb_build_array(fn_send(chat, fn_texto_equipo(payload)));
+  end if;
+
+  -- Preguntar por otro: el endpoint ya vino filtrado por SU correo, así que
+  -- users[0] es esa persona. Se puede consultar a cualquiera del equipo; lo
+  -- que nunca se mezcla es lo que el bot MANDA solo (avisos y resumen diario).
+  if params ->> 'de' is not null then
+    u := payload -> 'users' -> 0;
+    if u is null then
+      return jsonb_build_array(fn_send(chat, 'No encontré a esa persona en Xenith.'));
+    end if;
+    return jsonb_build_array(fn_send(chat,
+      replace(fn_texto_tareas_xenith(u), 'Tus pendientes en Xenith',
+              'Pendientes de ' || fn_html(params ->> 'de'))));
+  end if;
+
   select * into p from participantes where telegram_user_id = chat;
   if p.id is null then return '[]'::jsonb; end if;
   return jsonb_build_array(fn_send(chat, fn_texto_tareas_xenith(fn_xenith_usuario(payload, p))));
@@ -182,7 +219,8 @@ begin
     if jsonb_array_length(u -> 'asignadas') + jsonb_array_length(u -> 'porVotar') + jsonb_array_length(u -> 'porAprobar') = 0 then
       continue;
     end if;
-    acts := acts || fn_send(p.telegram_user_id, '☀️ Buenos días, ' || fn_html(fn_nombre(p)) || E'.\n\n' || fn_texto_tareas_xenith(u));
+    acts := acts || fn_send(p.telegram_user_id,
+      '☀️ Despierte, ' || fn_html(fn_nombre(p)) || E'. Esto es lo que tiene encima:\n' || fn_texto_tareas_xenith(u));
   end loop;
   return acts;
 end $$;
@@ -309,16 +347,25 @@ begin
 
   select jsonb_agg(slug order by id) || '["yo"]'::jsonb into destinos from participantes;
 
-  sistema := 'Eres el asistente del bot de Telegram del equipo Xenith y hablas por chat privado con '
-    || fn_nombre(yo) || '. El equipo son Camilo, Nicolás y David (le dicen Potro).' || E'\n'
+  sistema := 'Eres el bot del parche de Xenith y hablas por privado con ' || fn_nombre(yo)
+    || '. El combo son Camilo, Nicolás y David (alias Potro): tres socios que se joden entre ellos todo el día.' || E'\n'
     || 'Ayudas con tres cosas y nada más: recordatorios personales (crear, ver, cambiar, cancelar), '
-    || 'las tareas que tiene asignadas en el CRM de Xenith, y su avance en el reto anual del equipo.' || E'\n'
-    || 'Reglas:' || E'\n'
+    || 'las tareas del CRM de Xenith (las suyas o las de otro, si pregunta) y el avance del reto anual.' || E'\n'
+    || 'TU TONO (esto es lo que te hace tú):' || E'\n'
+    || '- Colombiano, callejero y mamagallista. Parcero, marica, güevón, no joda, hágale pues, qué pereza, '
+    || 'deje de gaminear, póngase las pilas, ni por el putas, ah mijo. Tutea o vosea, nunca usted formal.' || E'\n'
+    || '- Grosero y burlón con ellos, pero nunca cruel: se burla de la pereza y del incumplimiento, no de la persona. '
+    || 'Nada de racismo, sexismo ni insultos a la familia.' || E'\n'
+    || '- CORTO. Una o dos frases, máximo. Si te extiendes, perdiste la gracia.' || E'\n'
+    || '- Si alguien va atrasado o lleva días sin entregar, se lo echas en cara. Si cumplió, lo reconoces con una '
+    || 'palmada seca ("bien ahí") y sigues.' || E'\n'
+    || 'Reglas duras:' || E'\n'
     || '- Usa las herramientas para actuar o consultar; nunca inventes tareas, metas ni recordatorios.' || E'\n'
-    || '- Para crear un recordatorio necesitas qué y cuándo. Si falta la hora exacta, pregunta en una frase.' || E'\n'
+    || '- Para crear un recordatorio necesitas qué y cuándo. Si falta la hora, pregunta en UNA frase.' || E'\n'
     || '- Las fechas relativas (mañana, el viernes, en 2 horas) se calculan desde la fecha actual que llega en cada mensaje, hora de Bogotá.' || E'\n'
-    || '- Responde en español, en máximo 3 frases, texto plano sin markdown.' || E'\n'
-    || '- Si piden algo fuera de esto, dilo amablemente en una frase y menciona /tareas, /recordatorios o /metas.' || E'\n'
+    || '- Si preguntan por otra persona del equipo, usa ver_tareas_xenith con esa persona.' || E'\n'
+    || '- Texto plano, sin markdown, sin emojis de más (uno basta).' || E'\n'
+    || '- Si piden algo fuera de esto, los mandas a volar en una frase y mencionas /tareas, /equipo, /recordatorios o /metas.' || E'\n'
     || '- Una de las metas del reto se llama "Maria"; nunca escribas otro nombre para ella.';
 
   herramientas := jsonb_build_array(
@@ -347,8 +394,13 @@ begin
         'required', jsonb_build_array('id'),
         'properties', jsonb_build_object('id', jsonb_build_object('type', 'integer')))),
     jsonb_build_object('name', 'ver_tareas_xenith',
-      'description', 'Muestra las tareas pendientes de quien escribe en el CRM de Xenith: por hacer, por valorar y por aprobar.',
-      'input_schema', jsonb_build_object('type', 'object', 'additionalProperties', false, 'properties', '{}'::jsonb)),
+      'description', 'Muestra las tareas pendientes en el CRM de Xenith: por hacer, por valorar y por aprobar. '
+        || 'Sin "persona" muestra las de quien escribe; con el nombre de un compañero, las de esa persona; '
+        || 'con "todos", un resumen de cómo va el equipo. Úsala también para saber si alguien ya terminó su trabajo.',
+      'input_schema', jsonb_build_object('type', 'object', 'additionalProperties', false,
+        'properties', jsonb_build_object(
+          'persona', jsonb_build_object('type', 'string', 'enum', destinos || '["todos"]'::jsonb,
+            'description', '"yo" o se omite para las propias.')))),
     jsonb_build_object('name', 'ver_metas_reto',
       'description', 'Muestra el avance de quien escribe en sus metas del reto anual.',
       'input_schema', jsonb_build_object('type', 'object', 'additionalProperties', false, 'properties', '{}'::jsonb)));
@@ -451,11 +503,29 @@ begin
                       else '🗑 Cancelado: «' || fn_html(r.texto) || '».' end;
 
   elsif herr = 'ver_tareas_xenith' then
-    if yo.xenith_email is null then
-      respuesta := 'Tu usuario del bot no está enlazado con Xenith todavía.';
+    -- A quién le pregunta. El correo SIEMPRE sale de la tabla, nunca del
+    -- modelo: lo más que puede hacer es nombrar a alguien del equipo.
+    if coalesce(inp ->> 'persona', 'yo') = 'todos' then
+      acts := jsonb_build_array(fn_accion('__tareas', jsonb_build_object('chat_id', chat, 'modo', 'equipo')));
+      memoria := '(le mostré cómo va todo el equipo)';
     else
-      acts := jsonb_build_array(fn_accion('__tareas', jsonb_build_object('chat_id', chat, 'email', yo.xenith_email)));
-      memoria := '(le mostré sus tareas pendientes de Xenith)';
+      if coalesce(inp ->> 'persona', 'yo') in ('yo', 'me') then
+        otro := yo;
+      else
+        select * into otro from participantes
+         where lower(inp ->> 'persona') in (lower(slug), lower(nombre), lower(coalesce(apodo, '')), lower(split_part(nombre, ' ', 1)))
+         limit 1;
+      end if;
+      if otro.id is null then
+        respuesta := 'No sé quién es ese. Aquí solo estamos Camilo, Nicolás y el Potro.';
+      elsif otro.xenith_email is null then
+        respuesta := fn_html(fn_nombre(otro)) || ' no está enlazado con Xenith todavía.';
+      else
+        acts := jsonb_build_array(fn_accion('__tareas', jsonb_build_object(
+          'chat_id', chat, 'email', otro.xenith_email,
+          'de', case when otro.id = yo.id then null else fn_nombre(otro) end)));
+        memoria := '(le mostré las tareas de ' || fn_nombre(otro) || ')';
+      end if;
     end if;
 
   elsif herr = 'ver_metas_reto' then

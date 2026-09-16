@@ -1,7 +1,11 @@
 import { prisma } from '@/lib/db/prisma'
 import { getProjectPermissions } from '@/lib/auth/permissions'
 import { contributionSettingsService } from '@/lib/services/contribution-settings.service'
-import { getRequiredApproverIds, canReviewCompletion } from '@/lib/services/task-lifecycle'
+import {
+  getApprovalRequirement,
+  getRequiredApproverIds,
+  canReviewCompletion,
+} from '@/lib/services/task-lifecycle'
 import { computeDiscounts } from '@/lib/services/task-penalty'
 import { TaskPermissionError } from '@/lib/services/task.service'
 import { notificationService } from '@/lib/services/notification.service'
@@ -25,6 +29,8 @@ export interface ApprovalStateDTO {
   completionStatus: 'PENDING' | 'SUBMITTED' | 'ACCEPTED'
   completionRound: number
   requiredApproverIds: string[]
+  /** 'all' = firman todos los jefes; 'any' = basta uno del equipo. */
+  approvalMode: 'all' | 'any'
   approvals: Array<{
     userId: string
     approved: boolean
@@ -155,16 +161,22 @@ export const taskCompletionService = {
     // Condición 2: la valoración tiene que estar cerrada.
     if (task.valuationStatus !== 'VALUED' || task.pointsValue == null) return false
 
-    // Condición 1: todos los jefes requeridos aprobaron en la ronda actual.
-    const required = await getRequiredApproverIds(task.projectId, task.assignedTo)
-    if (required.length === 0) return false
+    // Condición 1: están las firmas que la tarea necesita en la ronda actual.
+    // Con `all` tienen que estar todas; con `any` basta una, que es el caso del
+    // jefe único que se asigna su propia tarea.
+    const requirement = await getApprovalRequirement(task.projectId, task.assignedTo)
+    if (requirement.userIds.length === 0) return false
 
     const approvals = await prisma.taskCompletionApproval.findMany({
       where: { taskId, round: task.completionRound, approved: true },
       select: { userId: true },
     })
     const approvedBy = new Set(approvals.map((a) => a.userId))
-    if (!required.every((id) => approvedBy.has(id))) return false
+    const signed =
+      requirement.mode === 'all'
+        ? requirement.userIds.every((id) => approvedBy.has(id))
+        : requirement.userIds.some((id) => approvedBy.has(id))
+    if (!signed) return false
 
     const settings = await contributionSettingsService.resolve(task.projectId)
     const now = new Date()
@@ -307,7 +319,8 @@ export const taskCompletionService = {
     const task = await prisma.task.findUnique({ where: { id: taskId }, select: taskSelect })
     if (!task) throw new Error('Tarea no encontrada')
 
-    const required = await getRequiredApproverIds(task.projectId, task.assignedTo)
+    const requirement = await getApprovalRequirement(task.projectId, task.assignedTo)
+    const required = requirement.userIds
     const approvals = await prisma.taskCompletionApproval.findMany({
       where: { taskId, round: task.completionRound },
       include: { user: { select: { id: true, name: true, email: true, image: true } } },
@@ -319,6 +332,7 @@ export const taskCompletionService = {
       completionStatus: task.completionStatus,
       completionRound: task.completionRound,
       requiredApproverIds: required,
+      approvalMode: requirement.mode,
       approvals: approvals.map((a) => ({
         userId: a.userId,
         approved: a.approved,

@@ -36,8 +36,8 @@
       "position": [480, 0],
       "parameters": {
         "operation": "executeQuery",
-        "query": "select fn_xenith_tareas_de($1::jsonb, $2::bigint) as acts",
-        "options": { "queryReplacement": "={{ [ $json, $('Recibe').item.json.params.chat_id ] }}" }
+        "query": "select fn_xenith_tareas_de($1::jsonb, $2::jsonb) as acts",
+        "options": { "queryReplacement": "={{ [ $json, $('Recibe').item.json.params ] }}" }
       },
       "credentials": { "postgres": { "id": "__PG_ID__", "name": "Postgres Reto" } }
     },

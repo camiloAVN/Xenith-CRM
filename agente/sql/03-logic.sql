@@ -128,6 +128,7 @@ language sql immutable as $$
       || E'💬 <b>Por privado</b> (abre el chat con el bot y dale Iniciar)\n'
       || E'Escríbeme normal: «recuérdame mañana a las 8 llamar al banco».\n'
       || E'/tareas — tus pendientes en Xenith\n'
+      || E'/equipo — cómo va cada uno con lo suyo\n'
       || E'/recordatorios — tus recordatorios\n'
       || E'/uso — cuánto se ha usado la IA'
 $$;
@@ -524,11 +525,13 @@ begin
   if cmd = '/avance' then return jsonb_build_array(fn_send(chat, fn_texto_avance(null))); end if;
 
   -- Lo personal siempre sale por privado, aunque lo pidan en el grupo
-  if cmd in ('/tareas', '/recordatorios', '/uso') then
+  if cmd in ('/tareas', '/equipo', '/recordatorios', '/uso') then
     acts := case when es_grupo
       then jsonb_build_array(fn_send(chat, '📬 Te respondí por privado.', null, msg_id))
       else '[]'::jsonb end;
-    if cmd = '/tareas' then
+    if cmd = '/equipo' then
+      return acts || fn_accion('__tareas', jsonb_build_object('chat_id', yo.telegram_user_id, 'modo', 'equipo'));
+    elsif cmd = '/tareas' then
       if yo.xenith_email is null then
         return acts || fn_send(yo.telegram_user_id, 'Tu usuario del bot no está enlazado con Xenith todavía.');
       end if;

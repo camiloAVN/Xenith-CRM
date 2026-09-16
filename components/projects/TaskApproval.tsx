@@ -24,6 +24,7 @@ interface ApprovalState {
   completionStatus: 'PENDING' | 'SUBMITTED' | 'ACCEPTED'
   completionRound: number
   requiredApproverIds: string[]
+  approvalMode?: 'all' | 'any'
   approvals: ApprovalRow[]
   approvedCount: number
   waitingForValuation: boolean
@@ -135,9 +136,16 @@ export function TaskApproval({
   // En "en progreso" no hay nada que revisar todavía.
   if (state.completionStatus === 'PENDING') return null
 
-  const pending = state.requiredApproverIds.filter(
-    (id) => !state.approvals.some((a) => a.userId === id && a.approved)
-  )
+  // Con modo 'any' basta una firma de cualquiera del equipo: es el caso del
+  // jefe único que se asignó su propia tarea.
+  const needsAny = state.approvalMode === 'any'
+  const pending = needsAny
+    ? state.approvedCount > 0
+      ? []
+      : [state.requiredApproverIds[0]]
+    : state.requiredApproverIds.filter(
+        (id) => !state.approvals.some((a) => a.userId === id && a.approved)
+      )
 
   return (
     <div className="rounded-lg border border-gray-800 overflow-hidden">
@@ -147,8 +155,11 @@ export function TaskApproval({
           Aceptación de cumplimiento
         </span>
         <span className="text-xs text-gray-500 tabular-nums">
-          {state.approvedCount} de {state.requiredApproverIds.length} jefe
-          {state.requiredApproverIds.length === 1 ? '' : 's'}
+          {needsAny
+            ? `${state.approvedCount} de 1 firma`
+            : `${state.approvedCount} de ${state.requiredApproverIds.length} jefe${
+                state.requiredApproverIds.length === 1 ? '' : 's'
+              }`}
         </span>
       </div>
 
@@ -163,7 +174,7 @@ export function TaskApproval({
                   {state.effectivePoints} puntos acreditados
                   {state.pointsValue != null &&
                     state.pointsValue !== state.effectivePoints &&
-                    ` (valor ${state.pointsValue} menos la penalización por retraso)`}
+                    ` (valor ${state.pointsValue} menos los descuentos)`}
                 </span>
               )}
             </div>
@@ -180,8 +191,9 @@ export function TaskApproval({
           <div className="flex items-start gap-2">
             <Hourglass className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
             <span className="text-sm text-amber-300">
-              Terminada — faltan {pending.length} aprobación
-              {pending.length === 1 ? '' : 'es'}
+              {needsAny
+                ? 'Terminada — la tuya es tu propia tarea: falta que alguien del equipo la acepte'
+                : `Terminada — faltan ${pending.length} aprobación${pending.length === 1 ? '' : 'es'}`}
             </span>
           </div>
         )}
