@@ -10,14 +10,18 @@ Xenith CRM — a Next.js 16 application for managing clients, projects, and quot
 
 1. **`DATABASE_URL` apunta a PRODUCCIÓN**, no a Docker. Es un Prisma Postgres remoto (`db.prisma.io`) con datos reales del equipo. `prisma migrate deploy`, `db:seed` y cualquier script que escriba afectan la base real. **Pide aprobación explícita antes de aplicar una migración.** El `docker-compose.yml` existe pero no se está usando.
 2. **`RESEND_API_KEY` es real y el dominio `xenith.com.co` está verificado.** Cualquier código que cree/acepte/rechace tareas envía correos de verdad a Nicolás, David y Camilo. En scripts de prueba, **neutraliza la clave antes de cualquier import** (ver "Verificación").
-3. **Despliegue automático:** un push a `main` dispara el deploy en Vercel. `npm run build` corre `prisma migrate deploy` antes de compilar, así que subir una migración la aplica en producción.
+3. **Despliegue automático:** un push a `main` dispara el deploy en Vercel. `npm run build` aplica las migraciones antes de compilar, así que subir una migración la aplica en producción.
+4. **El rol `prisma_migration` tiene MUY pocas conexiones.** Cada `npx tsx` contra producción, cada `prisma migrate` y cada `prisma studio` consume una, y tardan minutos en liberarse. Si se agotan:
+   - los scripts locales fallan con `FATAL: too many connections for role "prisma_migration"`;
+   - **y el deploy de Vercel se cae en el build**, aunque no haya migraciones pendientes.
+   Por eso el build pasa por `scripts/migrate-deploy.mjs`, que reintenta 4 veces cada 20 s **solo** ante ese error (cualquier otro error de migración sigue tumbando el build a propósito). Aun así: agrupa las verificaciones en UN script en vez de correr diez seguidos, y si el deploy falló por esto, espera unos minutos y vuelve a desplegar.
 
 ## Commands
 
 ```bash
 # Desarrollo
 npm run dev          # localhost:3000
-npm run build        # prisma generate + prisma migrate deploy + next build
+npm run build        # prisma generate + scripts/migrate-deploy.mjs + next build
 npm run lint         # ESLint
 
 # Base de datos (¡es producción!)
