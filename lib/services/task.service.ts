@@ -12,11 +12,26 @@ import { contributionSettingsService } from '@/lib/services/contribution-setting
 import { canSubmitCompletion, canAssigneeChangeStatus } from '@/lib/services/task-lifecycle'
 import { notificationService } from '@/lib/services/notification.service'
 import {
-  intervalLateDays,
   buildPenaltyPreview,
   type PenaltyTaskFields,
   type TaskPenaltyPreview,
 } from '@/lib/services/task-penalty'
+
+/**
+ * Guarda de sprint (capacidad y épicas).
+ *
+ * Import dinámico: `sprint.service` importa `TaskPermissionError` de este
+ * módulo, así que cargarlo arriba cerraría el ciclo.
+ */
+async function assertSprintFits(params: {
+  sprintId: string | null
+  assignedTo: string | null
+  taskId?: string
+  pointsValue?: number | null
+}) {
+  const { sprintService } = await import('@/lib/services/sprint.service')
+  await sprintService.assertCanCommit(params)
+}
 
 /** Error de regla de negocio: las rutas lo traducen a 403/422. */
 export class TaskPermissionError extends Error {
@@ -64,7 +79,7 @@ async function settleExpiredVotings(projectId: string) {
   }
 }
 
-const TRACKED_FIELDS = ['status', 'assignedTo', 'dueDate', 'priority'] as const
+const TRACKED_FIELDS = ['status', 'assignedTo', 'dueDate', 'priority', 'sprintId'] as const
 type TrackedField = (typeof TRACKED_FIELDS)[number]
 
 const FIELD_LABELS: Record<TrackedField, string> = {
@@ -72,13 +87,16 @@ const FIELD_LABELS: Record<TrackedField, string> = {
   assignedTo: 'assigned_to',
   dueDate: 'due_date',
   priority: 'priority',
+  sprintId: 'sprint',
 }
 
 export const taskService = {
   /**
    * Crea una tarea. Solo un jefe del proyecto (o el dueño) puede hacerlo, y la
-   * tarea nace con la ventana de votación abierta y el reloj de retraso
-   * corriendo.
+   * tarea nace con la ventana de votación abierta.
+   *
+   * Puede nacer SIN asignado (backlog estimado): el equipo la valora primero y
+   * se reparte en la planeación del sprint.
    */
   async createTask(projectId: string, data: CreateTaskDTO, currentUserId: string) {
     const project = await prisma.project.findUnique({
@@ -94,10 +112,19 @@ export const taskService = {
 
     // El asignado tiene que pertenecer al equipo: si no, nunca podría cobrar
     // sus puntos ni aparecer en el reparto del proyecto.
-    const memberIds = await getProjectMemberIds(projectId)
-    if (!memberIds.includes(data.assignedTo)) {
-      throw new TaskPermissionError('El asignado debe ser miembro del proyecto')
+    if (data.assignedTo) {
+      const memberIds = await getProjectMemberIds(projectId)
+      if (!memberIds.includes(data.assignedTo)) {
+        throw new TaskPermissionError('El asignado debe ser miembro del proyecto')
+      }
     }
+
+    // Recién creada todavía no tiene valor, así que la guarda usa el mínimo:
+    // lo que impide es meter a alguien que ya llenó su capacidad.
+    await assertSprintFits({
+      sprintId: data.sprintId ?? null,
+      assignedTo: data.assignedTo ?? null,
+    })
 
     const settings = await contributionSettingsService.resolve(projectId)
     const now = new Date()
@@ -108,10 +135,7 @@ export const taskService = {
       reporterId: data.reporterId ?? currentUserId,
     }
 
-    const task = await taskRepository.create(projectId, taskData, {
-      votingClosesAt,
-      lateClockStartedAt: now,
-    })
+    const task = await taskRepository.create(projectId, taskData, { votingClosesAt })
 
     // Fire and forget: un fallo de correo no puede impedir crear la tarea.
     void notificationService.taskCreated(task.id)
@@ -119,10 +143,7 @@ export const taskService = {
     return task
   },
 
-  /**
-   * El asignado marca la tarea como terminada. Pausa el reloj de retraso: a
-   * partir de aquí la demora de los jefes en revisar no le cuesta puntos.
-   */
+  /** El asignado marca la tarea como terminada y pasa a revisión de los jefes. */
   async submitCompletion(taskId: string, currentUserId: string) {
     const task = await prisma.task.findUnique({
       where: { id: taskId },
@@ -145,19 +166,11 @@ export const taskService = {
     if (!check.ok) throw new TaskPermissionError(check.reason as string)
 
     const now = new Date()
-    // Cerrar el tramo abierto ANTES de pausar: si solo se anulara el reloj, el
-    // retraso transcurrido en este tramo se perdería.
-    const closedInterval = task.lateClockStartedAt
-      ? intervalLateDays(task.lateClockStartedAt, now, task.dueDate)
-      : 0
-
     const updated = await prisma.task.update({
       where: { id: taskId },
       data: {
         completionStatus: 'SUBMITTED',
         submittedAt: now,
-        lateAccruedDays: Number(task.lateAccruedDays) + closedInterval,
-        lateClockStartedAt: null,
         // La tarjeta se mueve sola a "En Revisión": marcar terminada y dejarla
         // en la columna anterior obligaba a arrastrarla a mano, y el tablero
         // dejaba de reflejar que la tarea espera a los jefes.
@@ -201,6 +214,8 @@ export const taskService = {
         assignedTo: true,
         dueDate: true,
         priority: true,
+        sprintId: true,
+        pointsValue: true,
       },
     })
     if (!existing) throw new Error('Tarea no encontrada')
@@ -234,6 +249,30 @@ export const taskService = {
           'Solo puedes mover tu tarea de "Por Hacer" a "En Progreso". Cuando la termines, márcala como terminada y pasa sola a revisión.'
         )
       }
+    }
+
+    // Cambiar el compromiso —quién la hace, en qué sprint— pasa por la guarda
+    // de capacidad y por el bloqueo de épicas. Reasignar dentro del backlog no
+    // toca nada: el tope solo cuenta lo que está dentro de una caja de tiempo.
+    if (data.assignedTo !== undefined || data.sprintId !== undefined) {
+      const nextAssignee =
+        data.assignedTo !== undefined ? data.assignedTo ?? null : existing.assignedTo
+      const nextSprint =
+        data.sprintId !== undefined ? data.sprintId ?? null : existing.sprintId
+
+      if (nextAssignee && nextAssignee !== existing.assignedTo) {
+        const memberIds = await getProjectMemberIds(existing.projectId)
+        if (!memberIds.includes(nextAssignee)) {
+          throw new TaskPermissionError('El asignado debe ser miembro del proyecto')
+        }
+      }
+
+      await assertSprintFits({
+        sprintId: nextSprint,
+        assignedTo: nextAssignee,
+        taskId,
+        pointsValue: existing.pointsValue != null ? Number(existing.pointsValue) : null,
+      })
     }
 
     // Build history entries for changed tracked fields
@@ -352,9 +391,9 @@ export const taskService = {
     return withPenalty(projectId, tasks)
   },
 
-  async getKanbanBoard(projectId: string) {
+  async getKanbanBoard(projectId: string, sprintId?: string) {
     await settleExpiredVotings(projectId)
-    const board = await taskRepository.getKanbanBoard(projectId)
+    const board = await taskRepository.getKanbanBoard(projectId, sprintId)
 
     const settings = await contributionSettingsService.resolve(projectId)
     const now = new Date()

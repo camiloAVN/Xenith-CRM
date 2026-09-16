@@ -20,6 +20,7 @@ export async function GET(
       status: searchParams.get('status') ?? undefined,
       priority: searchParams.get('priority') ?? undefined,
       assignedTo: searchParams.get('assignedTo') ?? undefined,
+      sprintId: searchParams.get('sprintId') ?? undefined,
       dueDateFrom: searchParams.get('dueDateFrom') ?? undefined,
       dueDateTo: searchParams.get('dueDateTo') ?? undefined,
       search: searchParams.get('search') ?? undefined,
@@ -27,7 +28,7 @@ export async function GET(
 
     // If requesting kanban board view
     if (searchParams.get('view') === 'kanban') {
-      const board = await taskService.getKanbanBoard(id)
+      const board = await taskService.getKanbanBoard(id, filters.sprintId)
       return NextResponse.json(board)
     }
 

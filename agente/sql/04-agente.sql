@@ -112,6 +112,24 @@ language sql stable as $$
   from jsonb_array_elements(items) with ordinality a(x, n)
 $$;
 
+-- Sprints corriendo: la caja de tiempo y cuánto comprometió la persona
+create or replace function fn_xenith_sprints(items jsonb) returns text
+language sql stable as $$
+  select case when coalesce(jsonb_array_length(items), 0) = 0 then '' else
+    E'\n\n🏃 <b>Sprint</b>\n' || string_agg(
+      '• ' || fn_html(x ->> 'name') || ' · ' || fn_html(x ->> 'project')
+        || ' · ' || case
+             when (x ->> 'daysLeft')::int > 1 then 'quedan ' || (x ->> 'daysLeft') || ' días'
+             when (x ->> 'daysLeft')::int = 1 then 'queda 1 día'
+             when (x ->> 'daysLeft')::int = 0 then 'termina hoy'
+             else 'venció hace ' || abs((x ->> 'daysLeft')::int) || ' días' end
+        || ' · ' || fn_num((x ->> 'accepted')::numeric) || ' de '
+        || fn_num((x ->> 'committed')::numeric) || ' pts aceptados',
+      E'\n' order by n)
+  end
+  from jsonb_array_elements(items) with ordinality a(x, n)
+$$;
+
 -- Todos los pendientes de UNA persona (un elemento de `users` del endpoint)
 create or replace function fn_texto_tareas_xenith(u jsonb) returns text
 language sql stable as $$
@@ -119,7 +137,8 @@ language sql stable as $$
     when u is null then '🤷 No encontré tu usuario en Xenith.'
     when t = '' then '🎉 No tienes pendientes en Xenith.'
     else '📋 <b>Tus pendientes en Xenith</b>' || t end
-  from (select fn_xenith_seccion('🛠 <b>Por hacer</b>', u -> 'asignadas', 'asignada')
+  from (select fn_xenith_sprints(u -> 'sprints')
+            || fn_xenith_seccion('🛠 <b>Por hacer</b>', u -> 'asignadas', 'asignada')
             || fn_xenith_seccion('🗳 <b>Por valorar</b>', u -> 'porVotar', 'votar')
             || fn_xenith_seccion('✅ <b>Por aprobar</b>', u -> 'porAprobar', 'aprobar')
             || fn_xenith_seccion('⏳ <b>Esperando revisión</b>', u -> 'enRevision', null) as t) x

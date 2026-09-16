@@ -22,6 +22,7 @@ import { GanttView } from '@/components/projects/GanttView'
 import { TaskFilters } from '@/components/projects/TaskFilters'
 import { TaskDetailPanel } from '@/components/projects/TaskDetailPanel'
 import { ProjectProgress } from '@/components/projects/ProjectProgress'
+import { SprintBar } from '@/components/projects/SprintBar'
 import { ContributionShare } from '@/components/projects/ContributionShare'
 import { TaskCardData } from '@/components/projects/TaskCard'
 import { statusLabels, statusColors, priorityLabels, priorityColors } from '@/lib/validations/project'
@@ -118,6 +119,9 @@ export default function ProjectDetailPage({
   // Se incrementa en cada cambio de tarea para que el reparto se recalcule:
   // aceptar o reabrir una tarea mueve los porcentajes de todo el equipo.
   const [contributionsKey, setContributionsKey] = useState(0)
+  // Alcance del tablero: un id de sprint, 'backlog' o 'all'. La barra lo pone
+  // en el sprint activo al abrir el proyecto.
+  const [sprintScope, setSprintScope] = useState('all')
 
   // Fetch project and initial data
   const loadProject = useCallback(async () => {
@@ -147,10 +151,14 @@ export default function ProjectDetailPage({
       if (filters.assignedTo) params.set('assignedTo', filters.assignedTo)
       if (filters.dueDateFrom) params.set('dueDateFrom', filters.dueDateFrom)
       if (filters.dueDateTo) params.set('dueDateTo', filters.dueDateTo)
+      if (sprintScope !== 'all') params.set('sprintId', sprintScope)
+
+      const kanbanParams = new URLSearchParams({ view: 'kanban' })
+      if (sprintScope !== 'all') kanbanParams.set('sprintId', sprintScope)
 
       const [listRes, kanbanRes] = await Promise.all([
         fetch(`/api/v1/projects/${id}/tasks?${params}`),
-        fetch(`/api/v1/projects/${id}/tasks?view=kanban`),
+        fetch(`/api/v1/projects/${id}/tasks?${kanbanParams}`),
       ])
 
       if (listRes.ok) setAllTasks(await listRes.json())
@@ -161,7 +169,7 @@ export default function ProjectDetailPage({
     } catch (err) {
       console.error('Error loading tasks:', err)
     }
-  }, [id, filters])
+  }, [id, filters, sprintScope])
 
   useEffect(() => {
     const init = async () => {
@@ -191,7 +199,7 @@ export default function ProjectDetailPage({
 
   const canManageTasks = project?.permissions?.canManageTasks ?? false
   const canCreateTask =
-    newTaskTitle.trim().length > 0 && newTaskAssignee !== '' && newTaskDueDate !== ''
+    newTaskTitle.trim().length > 0
 
   const handleTaskClick = (task: TaskCardData) => {
     setSelectedTask(task)
@@ -255,8 +263,11 @@ export default function ProjectDetailPage({
         body: JSON.stringify({
           title: newTaskTitle.trim(),
           status: 'TODO',
-          assignedTo: newTaskAssignee,
-          dueDate: newTaskDueDate,
+          assignedTo: newTaskAssignee || null,
+          dueDate: newTaskDueDate || null,
+          // Al crear desde el tablero, la tarea entra al sprint que se está
+          // mirando; desde el backlog o desde "todas", nace sin comprometer.
+          sprintId: sprintScope !== 'all' && sprintScope !== 'backlog' ? sprintScope : null,
         }),
       })
       if (res.ok) {
@@ -420,6 +431,15 @@ export default function ProjectDetailPage({
         </div>
       </div>
 
+      {/* ---- Sprint: la caja de tiempo y la capacidad de cada quien ---- */}
+      <SprintBar
+        projectId={id}
+        canManage={canManageTasks}
+        scope={sprintScope}
+        onScopeChange={setSprintScope}
+        onChanged={loadTasks}
+      />
+
       {/* ---- Filters ---- */}
       <Card className="py-3 px-4">
         <TaskFilters users={users} filters={filters} onChange={setFilters} />
@@ -517,7 +537,7 @@ export default function ProjectDetailPage({
                     onChange={(e) => setNewTaskAssignee(e.target.value)}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-violet-500 transition-colors"
                   >
-                    <option value="">Selecciona a quién</option>
+                    <option value="">Sin asignar — al backlog</option>
                     {teamMembers.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.name || u.email}

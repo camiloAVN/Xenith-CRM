@@ -24,6 +24,7 @@ interface TaskDetail {
   status: 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'DONE' | 'BLOCKED'
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
   assignedTo?: string | null
+  sprintId?: string | null
   reporterId?: string | null
   dueDate?: string | Date | null
   estimatedHours?: number | null
@@ -179,6 +180,19 @@ export function TaskDetailPanel({
       loadFullTask()
     }
   }, [isOpen, task?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sprints del proyecto, para poder mover la tarea de caja de tiempo.
+  const [sprints, setSprints] = useState<
+    { id: string; name: string; status: 'PLANNED' | 'ACTIVE' | 'CLOSED' }[]
+  >([])
+
+  useEffect(() => {
+    if (!isOpen) return
+    fetch(`/api/v1/projects/${projectId}/sprints`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setSprints(data.sprints ?? []))
+      .catch(() => setSprints([]))
+  }, [isOpen, projectId])
 
   const updateField = async (field: string, value: unknown) => {
     if (!task || isSaving) return
@@ -429,16 +443,38 @@ export function TaskDetailPanel({
                   <div className="relative">
                     <select
                       value={ft.assignedTo ?? ''}
-                      // Una tarea no puede quedarse sin asignado: no habria a
-                      // quien acreditarle los puntos. Solo se reasigna.
-                      onChange={(e) => e.target.value && updateField('assignedTo', e.target.value)}
+                      // Desde la Fase 2 sí se puede soltar: una tarea sin dueño
+                      // vuelve al backlog a la espera de la próxima planeación.
+                      onChange={(e) => updateField('assignedTo', e.target.value || null)}
                       disabled={!canManageTasks}
                       className="w-full appearance-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 pr-8 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      {!ft.assignedTo && <option value="">Sin asignar</option>}
+                      <option value="">Sin asignar</option>
                       {users.map((u) => (
                         <option key={u.id} value={u.id}>
                           {u.name ?? u.email}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Sprint: el compromiso. Fuera de uno, la tarea está en el backlog. */}
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">Sprint</label>
+                  <div className="relative">
+                    <select
+                      value={ft.sprintId ?? ''}
+                      onChange={(e) => updateField('sprintId', e.target.value || null)}
+                      disabled={!canManageTasks}
+                      className="w-full appearance-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 pr-8 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Backlog (sin comprometer)</option>
+                      {sprints.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                          {s.status === 'ACTIVE' ? ' · activo' : s.status === 'CLOSED' ? ' · cerrado' : ''}
                         </option>
                       ))}
                     </select>
@@ -460,9 +496,9 @@ export function TaskDetailPanel({
                   <input
                     type="date"
                     value={ft.dueDate ? new Date(ft.dueDate).toISOString().split('T')[0] : ''}
-                    // Vaciarla dejaria la tarea sin penalizacion calculable, asi
-                    // que solo se acepta un cambio a otra fecha.
-                    onChange={(e) => e.target.value && updateField('dueDate', e.target.value)}
+                    // Desde la Fase 2 la fecha es informativa: lo que descuenta
+                    // es el sprint, así que se puede dejar vacía.
+                    onChange={(e) => updateField('dueDate', e.target.value || null)}
                     disabled={!canManageTasks}
                     className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   />

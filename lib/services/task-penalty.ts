@@ -1,109 +1,92 @@
 import type { ContributionSettings } from '@/lib/services/contribution-settings.service'
 
 /**
- * Penalización por retraso.
+ * Descuentos sobre el valor de una tarea.
  *
- * El reloj corre solo DESPUÉS de la fecha límite y se pausa cuando el asignado
- * marca "terminada" — no cuando los jefes aceptan — para no castigarlo por la
- * demora de la revisión. Si los jefes rechazan, vuelve a correr desde el
- * rechazo hasta que se re-marque terminada.
+ * Desde la Fase 2 (Scrum) la referencia es el SPRINT, no la fecha límite: el
+ * compromiso del equipo es terminar dentro de la caja de tiempo, así que lo
+ * que descuenta es
  *
- * Eso da una serie de tramos abiertos y cerrados. En vez de reconstruirlos
- * desde el historial, la tarea guarda `lateAccruedDays` (suma de los tramos ya
- * cerrados) y `lateClockStartedAt` (inicio del tramo abierto, o null si está
- * pausado). El total es la suma de ambos.
+ *   - **arrastre**: cada vez que la tarea pasa sin terminar a otro sprint;
+ *   - **retrabajo**: cada rechazo de los jefes (`completionRound - 1`).
+ *
+ * La `dueDate` sigue existiendo y se muestra en rojo cuando vence, pero ya no
+ * cuesta puntos: penalizar por día era gestión por fechas, no Scrum. Las
+ * columnas `lateAccruedDays` / `lateClockStartedAt` quedan en la base para
+ * poder leer el histórico; nada nuevo las escribe.
+ *
+ * El piso (50 % por defecto) sigue siendo el mismo: por muchos tropiezos que
+ * tenga, una tarea nunca vale menos de la mitad de lo que el equipo estimó.
  */
 
-const MS_PER_DAY = 86_400_000
-
-export interface PenaltyInput {
-  dueDate: Date | null
-  /** Días de los tramos ya cerrados. */
-  lateAccruedDays: number
-  /** Inicio del tramo en curso; null = reloj pausado. */
-  lateClockStartedAt: Date | null
-  now?: Date
+export interface TaskDiscountInput {
+  /** Rechazos de los jefes: `completionRound - 1`. */
+  rejections: number
+  /** Veces que la tarea se arrastró a otro sprint. */
+  carryovers: number
 }
 
-/**
- * Días de retraso que aporta un tramo [start, end].
- *
- * Se recorta contra `dueDate`: un tramo que termina antes de la fecha límite
- * aporta cero, y uno que la cruza aporta solo su parte posterior.
- */
-export function intervalLateDays(
-  start: Date,
-  end: Date,
-  dueDate: Date | null
-): number {
-  if (!dueDate) return 0
-  const from = Math.max(start.getTime(), dueDate.getTime())
-  const elapsed = end.getTime() - from
-  return elapsed > 0 ? elapsed / MS_PER_DAY : 0
-}
-
-/** Retraso total acumulado, incluyendo el tramo abierto si el reloj corre. */
-export function totalLateDays(input: PenaltyInput): number {
-  const now = input.now ?? new Date()
-  const open = input.lateClockStartedAt
-    ? intervalLateDays(input.lateClockStartedAt, now, input.dueDate)
-    : 0
-  return input.lateAccruedDays + open
-}
-
-export interface PenaltyResult {
-  /** Días completos vencidos: 1.9 días de retraso penalizan como 1. */
-  fullDaysLate: number
-  /** Puntos descontados, ya topados por el piso. */
+export interface DiscountResult {
+  /** Puntos descontados por retrabajo, antes del piso. */
+  reworkPenalty: number
+  /** Puntos descontados por arrastre, antes del piso. */
+  carryoverPenalty: number
+  /** Descuento total ya topado por el piso. */
   penalty: number
-  /** Valor acreditable: valor finalizado − penalización. */
+  /** Valor acreditable: valor estimado − descuento. */
   effectivePoints: number
-  /** true si el piso recortó la penalización. */
+  /** true si el piso recortó el descuento. */
   floored: boolean
 }
 
-/**
- * Penalización sobre un valor ya fijado.
- *
- * Se cuentan días COMPLETOS vencidos (`floor`), y el piso impide que la tarea
- * baje del porcentaje configurado de su valor (50 % por defecto).
- */
-export function computePenalty(
-  pointsValue: number,
-  lateDays: number,
-  settings: ContributionSettings
-): PenaltyResult {
-  const fullDaysLate = Math.max(0, Math.floor(lateDays))
-  const rawPenalty = fullDaysLate * settings.penaltyPerDay
-  const floorValue = pointsValue * settings.penaltyFloorRatio
-  const maxPenalty = pointsValue - floorValue
+const round2 = (n: number) => Math.round(n * 100) / 100
 
-  const penalty = Math.min(rawPenalty, maxPenalty)
-  // Redondeo a 2 decimales: la columna es Decimal(5,2) y evita arrastrar
-  // ruido de coma flotante (0.1 + 0.2) al ledger, que se suma para el %.
-  const round2 = (n: number) => Math.round(n * 100) / 100
+/**
+ * Descuento sobre un valor ya fijado.
+ *
+ * Los dos descuentos son proporcionales al valor de la tarea: 25 % de un 13
+ * pesa más que 25 % de un 2, que es justamente lo que se quiere —perder el
+ * sprint en algo grande cuesta más—. Se suman (no se componen) y el piso los
+ * recorta al final.
+ */
+export function computeDiscounts(
+  pointsValue: number,
+  input: TaskDiscountInput,
+  settings: ContributionSettings
+): DiscountResult {
+  const rejections = Math.max(0, Math.floor(input.rejections))
+  const carryovers = Math.max(0, Math.floor(input.carryovers))
+
+  const reworkPenalty = pointsValue * settings.reworkPenalty * rejections
+  const carryoverPenalty = pointsValue * settings.carryoverPenalty * carryovers
+
+  const raw = reworkPenalty + carryoverPenalty
+  const maxPenalty = pointsValue - pointsValue * settings.penaltyFloorRatio
+  const penalty = Math.min(raw, maxPenalty)
 
   return {
-    fullDaysLate,
+    reworkPenalty: round2(reworkPenalty),
+    carryoverPenalty: round2(carryoverPenalty),
+    // Redondeo a 2 decimales: la columna es Decimal(5,2) y evita arrastrar
+    // ruido de coma flotante al ledger, que se suma para el %.
     penalty: round2(penalty),
     effectivePoints: round2(pointsValue - penalty),
-    floored: rawPenalty > maxPenalty,
+    floored: raw > maxPenalty,
   }
 }
 
-/** Vista en vivo de la penalización de una tarea, tal como la consume la UI. */
+/** Vista en vivo de los descuentos de una tarea, tal como la consume la UI. */
 export interface TaskPenaltyPreview {
-  /** Días de retraso fraccionarios acumulados hasta ahora. */
-  lateDays: number
-  /** Días completos que sí penalizan. */
-  fullDaysLate: number
-  penalty: number
   pointsValue: number | null
   /** Valor acreditable hoy; en una tarea aceptada, el que ya se acreditó. */
   effectivePoints: number | null
+  penalty: number
+  reworkPenalty: number
+  carryoverPenalty: number
+  rejections: number
+  carryovers: number
   floored: boolean
-  /** true si el reloj está corriendo ahora mismo. */
-  clockRunning: boolean
+  /** Informativo: la fecha límite ya pasó. No descuenta nada. */
   isOverdue: boolean
 }
 
@@ -113,16 +96,16 @@ export interface PenaltyTaskFields {
   pointsValue: unknown | null
   effectivePoints: unknown | null
   completionStatus: string
-  lateAccruedDays: unknown
-  lateClockStartedAt: Date | null
+  completionRound: number
+  carriedOverCount: number
 }
 
 /**
- * Penalización vigente de una tarea.
+ * Descuentos vigentes de una tarea.
  *
  * En una tarea ACEPTADA no se recalcula nada: el valor efectivo quedó
- * congelado en el momento de la aceptación y es el que está en el ledger.
- * Recalcularlo la haría "seguir penalizándose" después de cobrada.
+ * congelado al aceptarla y es el que está en el ledger. Recalcularlo la haría
+ * "seguir cambiando" después de cobrada.
  */
 export function buildPenaltyPreview(
   task: PenaltyTaskFields,
@@ -130,55 +113,54 @@ export function buildPenaltyPreview(
   now: Date = new Date()
 ): TaskPenaltyPreview {
   const pointsValue = task.pointsValue != null ? Number(task.pointsValue) : null
+  const rejections = Math.max(0, (task.completionRound ?? 1) - 1)
+  const carryovers = task.carriedOverCount ?? 0
+  const isOverdue = task.dueDate != null && task.dueDate < now && task.completionStatus !== 'ACCEPTED'
 
   if (task.completionStatus === 'ACCEPTED') {
-    const lateDays = Number(task.lateAccruedDays)
+    const effectivePoints = task.effectivePoints != null ? Number(task.effectivePoints) : null
     return {
-      lateDays,
-      fullDaysLate: Math.max(0, Math.floor(lateDays)),
-      penalty:
-        pointsValue != null && task.effectivePoints != null
-          ? Math.round((pointsValue - Number(task.effectivePoints)) * 100) / 100
-          : 0,
       pointsValue,
-      effectivePoints: task.effectivePoints != null ? Number(task.effectivePoints) : null,
+      effectivePoints,
+      penalty:
+        pointsValue != null && effectivePoints != null
+          ? round2(pointsValue - effectivePoints)
+          : 0,
+      reworkPenalty: 0,
+      carryoverPenalty: 0,
+      rejections,
+      carryovers,
       floored: false,
-      clockRunning: false,
-      isOverdue: lateDays > 0,
+      isOverdue: false,
     }
   }
 
-  const lateDays = totalLateDays({
-    dueDate: task.dueDate,
-    lateAccruedDays: Number(task.lateAccruedDays),
-    lateClockStartedAt: task.lateClockStartedAt,
-    now,
-  })
-
-  // Sin valor fijado todavía no hay nada que descontar, pero el retraso ya
-  // se muestra: el equipo debe verlo correr antes de que cierre la votación.
+  // Sin valor fijado todavía no hay nada que descontar, pero los tropiezos ya
+  // se cuentan: el equipo debe verlos antes de que cierre la votación.
   if (pointsValue == null) {
     return {
-      lateDays,
-      fullDaysLate: Math.max(0, Math.floor(lateDays)),
-      penalty: 0,
       pointsValue: null,
       effectivePoints: null,
+      penalty: 0,
+      reworkPenalty: 0,
+      carryoverPenalty: 0,
+      rejections,
+      carryovers,
       floored: false,
-      clockRunning: task.lateClockStartedAt != null,
-      isOverdue: lateDays > 0,
+      isOverdue,
     }
   }
 
-  const result = computePenalty(pointsValue, lateDays, settings)
+  const result = computeDiscounts(pointsValue, { rejections, carryovers }, settings)
   return {
-    lateDays,
-    fullDaysLate: result.fullDaysLate,
-    penalty: result.penalty,
     pointsValue,
     effectivePoints: result.effectivePoints,
+    penalty: result.penalty,
+    reworkPenalty: result.reworkPenalty,
+    carryoverPenalty: result.carryoverPenalty,
+    rejections,
+    carryovers,
     floored: result.floored,
-    clockRunning: task.lateClockStartedAt != null,
-    isOverdue: lateDays > 0,
+    isOverdue,
   }
 }

@@ -5,7 +5,6 @@ import { TaskStatus } from '@prisma/client'
 /** Estado inicial de las capas de puntos, calculado por el servicio. */
 export interface TaskLifecycleInit {
   votingClosesAt: Date
-  lateClockStartedAt: Date
 }
 
 const userSelect = {
@@ -51,6 +50,9 @@ export const taskRepository = {
     if (filters.assignedTo) {
       where.assignedTo = filters.assignedTo
     }
+    if (filters.sprintId) {
+      where.sprintId = filters.sprintId === 'backlog' ? null : filters.sprintId
+    }
     if (filters.search) {
       where.title = { contains: filters.search, mode: 'insensitive' }
     }
@@ -88,20 +90,19 @@ export const taskRepository = {
         description: data.description,
         status: data.status ?? 'TODO',
         priority: data.priority ?? 'MEDIUM',
-        assignedTo: data.assignedTo,
+        assignedTo: data.assignedTo ?? null,
         reporterId: data.reporterId ?? null,
-        dueDate: new Date(data.dueDate),
+        dueDate: data.dueDate ? new Date(data.dueDate) : null,
+        sprintId: data.sprintId ?? null,
         estimatedHours: data.estimatedHours ?? null,
         actualHours: data.actualHours ?? null,
         order: data.order ?? nextOrder,
         tags: data.tags ?? [],
-        // El trabajo arranca de una vez; la votación corre en paralelo.
+        // La votación corre en paralelo al trabajo, y en el backlog corre
+        // incluso antes de que la tarea tenga dueño.
         valuationStatus: 'VOTING',
         votingClosesAt: lifecycle.votingClosesAt,
         completionStatus: 'PENDING',
-        // El reloj de retraso arranca ya, pero solo cuenta el tiempo posterior
-        // a dueDate, así que un tramo previo a la fecha límite suma cero.
-        lateClockStartedAt: lifecycle.lateClockStartedAt,
       },
       include: taskInclude,
     })
@@ -117,7 +118,8 @@ export const taskRepository = {
         ...(data.priority !== undefined && { priority: data.priority }),
         ...(data.assignedTo !== undefined && { assignedTo: data.assignedTo }),
         ...(data.reporterId !== undefined && { reporterId: data.reporterId }),
-        ...(data.dueDate !== undefined && { dueDate: new Date(data.dueDate) }),
+        ...(data.dueDate !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null }),
+        ...(data.sprintId !== undefined && { sprintId: data.sprintId }),
         ...(data.estimatedHours !== undefined && { estimatedHours: data.estimatedHours }),
         ...(data.actualHours !== undefined && { actualHours: data.actualHours }),
         ...(data.order !== undefined && { order: data.order }),
@@ -142,9 +144,13 @@ export const taskRepository = {
     )
   },
 
-  async getKanbanBoard(projectId: string) {
+  async getKanbanBoard(projectId: string, sprintId?: string) {
     const tasks = await prisma.task.findMany({
-      where: { projectId },
+      where: {
+        projectId,
+        // "backlog" son las que todavía no entran en ninguna caja de tiempo.
+        ...(sprintId ? { sprintId: sprintId === 'backlog' ? null : sprintId } : {}),
+      },
       include: taskInclude,
       orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
     })

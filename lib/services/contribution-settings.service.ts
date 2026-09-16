@@ -11,14 +11,23 @@ export interface ContributionSettings {
   minVotes: number
   minPoints: number
   maxPoints: number
+  /** Penalización por día de la etapa anterior. Solo para leer el histórico. */
   penaltyPerDay: number
   penaltyFloorRatio: number
   disagreementDelta: number
   votingWindowHours: number
+  /** Duración por defecto de un sprint nuevo. */
+  sprintLengthDays: number
+  /** Tope de puntos por persona con el que nace cada sprint. */
+  defaultCapacityPoints: number
+  /** Descuento por cada arrastre a otro sprint. */
+  carryoverPenalty: number
+  /** Descuento por cada rechazo de los jefes. */
+  reworkPenalty: number
 }
 
 /**
- * Fallback si la fila global llegara a faltar.
+ * Fallback si la fila global llegara a faltar. Coincide con los `@default`.
  *
  * `minPoints` / `maxPoints` son los extremos de la escala Fibonacci (1 y 21),
  * no un rango continuo: los valores que se pueden votar salen de
@@ -26,9 +35,6 @@ export interface ContributionSettings {
  *
  * `disagreementDelta` se mide en PELDAÑOS de la escala (2 = dos saltos, por
  * ejemplo 3 contra 8), no en puntos.
- *
- * Los `@default` del schema siguen en los valores viejos (2–10, delta 5) hasta
- * la migración de la Fase 2; la fila global ya está en estos números.
  */
 export const DEFAULT_SETTINGS: ContributionSettings = {
   minVotes: 2,
@@ -38,6 +44,10 @@ export const DEFAULT_SETTINGS: ContributionSettings = {
   penaltyFloorRatio: 0.5,
   disagreementDelta: 2,
   votingWindowHours: 24,
+  sprintLengthDays: 14,
+  defaultCapacityPoints: 13,
+  carryoverPenalty: 0.2,
+  reworkPenalty: 0.25,
 }
 
 type SettingsRow = {
@@ -48,6 +58,10 @@ type SettingsRow = {
   penaltyFloorRatio: unknown
   disagreementDelta: number
   votingWindowHours: number
+  sprintLengthDays: number
+  defaultCapacityPoints: number
+  carryoverPenalty: unknown
+  reworkPenalty: unknown
 }
 
 function toSettings(row: SettingsRow): ContributionSettings {
@@ -59,6 +73,10 @@ function toSettings(row: SettingsRow): ContributionSettings {
     penaltyFloorRatio: Number(row.penaltyFloorRatio),
     disagreementDelta: row.disagreementDelta,
     votingWindowHours: row.votingWindowHours,
+    sprintLengthDays: row.sprintLengthDays,
+    defaultCapacityPoints: row.defaultCapacityPoints,
+    carryoverPenalty: Number(row.carryoverPenalty),
+    reworkPenalty: Number(row.reworkPenalty),
   }
 }
 

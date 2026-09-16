@@ -1,15 +1,16 @@
 'use client'
 
-import { TimerOff, Timer, TrendingDown } from 'lucide-react'
+import { TrendingDown, RotateCcw, ArrowRightLeft } from 'lucide-react'
 
 export interface TaskPenaltyData {
-  lateDays: number
-  fullDaysLate: number
-  penalty: number
   pointsValue: number | null
   effectivePoints: number | null
+  penalty: number
+  reworkPenalty: number
+  carryoverPenalty: number
+  rejections: number
+  carryovers: number
   floored: boolean
-  clockRunning: boolean
   isOverdue: boolean
 }
 
@@ -20,37 +21,40 @@ interface TaskPenaltyProps {
 }
 
 /**
- * Penalización por retraso.
+ * Descuentos sobre el valor de la tarea.
  *
- * Solo aparece cuando hay retraso real: una tarea al día no gana una franja
- * que no dice nada.
+ * Solo aparece cuando hay algo que descontar: una tarea que va limpia no gana
+ * una franja que no dice nada. Lo que descuenta son los tropiezos del proceso
+ * —rechazos y arrastres de sprint—, no la fecha límite.
  */
 export function TaskPenalty({ penalty, isAccepted = false }: TaskPenaltyProps) {
-  if (!penalty || !penalty.isOverdue) return null
+  if (!penalty) return null
 
-  const { fullDaysLate, penalty: discount, pointsValue, effectivePoints, floored, clockRunning } =
+  const { rejections, carryovers, penalty: discount, pointsValue, effectivePoints, floored } =
     penalty
+
+  const hasDiscount = rejections > 0 || carryovers > 0
+  if (!hasDiscount) return null
 
   return (
     <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5 space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-3 flex-wrap">
         <span className="flex items-center gap-1.5 text-xs font-medium text-red-300">
           <TrendingDown className="w-3.5 h-3.5" />
-          {fullDaysLate} día{fullDaysLate === 1 ? '' : 's'} de retraso
+          Descuentos
         </span>
-        <span className="flex items-center gap-1 text-[11px] text-gray-500">
-          {clockRunning ? (
-            <>
-              <Timer className="w-3 h-3 text-amber-400" />
-              contando
-            </>
-          ) : (
-            <>
-              <TimerOff className="w-3 h-3" />
-              {isAccepted ? 'cerrado' : 'pausado'}
-            </>
-          )}
-        </span>
+        {rejections > 0 && (
+          <span className="flex items-center gap-1 text-[11px] text-gray-400">
+            <RotateCcw className="w-3 h-3" />
+            {rejections} rechazo{rejections === 1 ? '' : 's'}
+          </span>
+        )}
+        {carryovers > 0 && (
+          <span className="flex items-center gap-1 text-[11px] text-gray-400">
+            <ArrowRightLeft className="w-3 h-3" />
+            {carryovers} arrastre{carryovers === 1 ? '' : 's'} de sprint
+          </span>
+        )}
       </div>
 
       {pointsValue == null ? (
@@ -61,20 +65,14 @@ export function TaskPenalty({ penalty, isAccepted = false }: TaskPenaltyProps) {
         <p className="text-xs text-gray-300 tabular-nums">
           {pointsValue} − {discount} ={' '}
           <span className="font-semibold text-gray-100">{effectivePoints}</span> puntos
-          {isAccepted ? ' acreditados' : ' si se acepta hoy'}
+          {isAccepted ? ' acreditados' : ' si se acepta así'}
         </p>
       )}
 
       {floored && (
         <p className="text-[11px] text-amber-400 leading-relaxed">
-          La penalización tocó el piso: una tarea nunca baja del 50 % de su valor.
-        </p>
-      )}
-
-      {!clockRunning && !isAccepted && (
-        <p className="text-[11px] text-gray-500 leading-relaxed">
-          El contador está pausado desde que la marcaste como terminada. La
-          demora de los jefes en revisar no te cuesta puntos.
+          El descuento tocó el piso: una tarea nunca baja del 50 % de lo que el
+          equipo estimó.
         </p>
       )}
     </div>

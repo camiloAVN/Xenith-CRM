@@ -21,11 +21,25 @@ export interface BotTask {
   projectId: string
   project: string
   dueDate: string | null
+  /** Nombre del sprint al que se comprometió, o null si está en el backlog. */
+  sprint: string | null
+}
+
+/** Resumen del sprint corriendo en un proyecto, desde la vista de una persona. */
+export interface BotSprint {
+  project: string
+  name: string
+  endDate: string
+  daysLeft: number
+  capacity: number
+  committed: number
+  accepted: number
 }
 
 export interface BotUserPending {
   email: string
   name: string | null
+  sprints: BotSprint[]
   asignadas: (BotTask & { status: string; priority: string; overdueDays: number })[]
   enRevision: BotTask[]
   porVotar: (BotTask & { votingClosesAt: string | null })[]
@@ -45,6 +59,7 @@ function toBotTask(t: {
   projectId: string
   dueDate: Date | null
   project: { title: string }
+  sprint?: { name: string } | null
 }): BotTask {
   return {
     id: t.id,
@@ -52,6 +67,7 @@ function toBotTask(t: {
     projectId: t.projectId,
     project: t.project.title,
     dueDate: t.dueDate?.toISOString() ?? null,
+    sprint: t.sprint?.name ?? null,
   }
 }
 
@@ -73,6 +89,7 @@ export const botService = {
       where: { completionStatus: { not: 'ACCEPTED' } },
       include: {
         project: { select: { title: true } },
+        sprint: { select: { name: true } },
         assignedUser: { select: { name: true } },
         pointVotes: { select: { userId: true } },
         approvals: { select: { userId: true, round: true } },
@@ -106,11 +123,52 @@ export const botService = {
         ])
       : [[], []]
 
+    // Sprints corriendo, con lo comprometido y lo aceptado de cada quien. Es
+    // el mismo número que ve el equipo en la barra del proyecto.
+    const activeSprints = await prisma.sprint.findMany({
+      where: { status: 'ACTIVE' },
+      include: {
+        project: { select: { title: true } },
+        capacities: { select: { userId: true, points: true } },
+        tasks: {
+          select: {
+            assignedTo: true,
+            pointsValue: true,
+            effectivePoints: true,
+            completionStatus: true,
+          },
+        },
+      },
+    })
+
     const result: BotUserPending[] = []
     for (const user of users) {
       const entry: BotUserPending = {
         email: user.email,
         name: user.name,
+        sprints: activeSprints
+          .filter((s) => s.tasks.some((t) => t.assignedTo === user.id) ||
+            s.capacities.some((c) => c.userId === user.id))
+          .map((s) => {
+            const mine = s.tasks.filter((t) => t.assignedTo === user.id)
+            return {
+              project: s.project.title,
+              name: s.name,
+              endDate: s.endDate.toISOString(),
+              daysLeft: Math.ceil((s.endDate.getTime() - now.getTime()) / DAY_MS),
+              capacity: s.capacities.find((c) => c.userId === user.id)?.points ?? 0,
+              committed: mine.reduce(
+                (sum, t) => sum + (t.pointsValue != null ? Number(t.pointsValue) : 0),
+                0
+              ),
+              accepted: mine
+                .filter((t) => t.completionStatus === 'ACCEPTED')
+                .reduce(
+                  (sum, t) => sum + (t.effectivePoints != null ? Number(t.effectivePoints) : 0),
+                  0
+                ),
+            }
+          }),
         asignadas: [],
         enRevision: [],
         porVotar: [],

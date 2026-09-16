@@ -2,7 +2,7 @@ import { prisma } from '@/lib/db/prisma'
 import { getProjectPermissions } from '@/lib/auth/permissions'
 import { contributionSettingsService } from '@/lib/services/contribution-settings.service'
 import { getRequiredApproverIds, canReviewCompletion } from '@/lib/services/task-lifecycle'
-import { computePenalty, totalLateDays } from '@/lib/services/task-penalty'
+import { computeDiscounts } from '@/lib/services/task-penalty'
 import { TaskPermissionError } from '@/lib/services/task.service'
 import { notificationService } from '@/lib/services/notification.service'
 
@@ -50,6 +50,7 @@ const taskSelect = {
   valuationStatus: true,
   completionStatus: true,
   completionRound: true,
+  carriedOverCount: true,
   status: true,
   pointsValue: true,
   effectivePoints: true,
@@ -102,8 +103,6 @@ export const taskCompletionService = {
           completionRound: { increment: 1 },
           submittedAt: null,
           lastRejectedAt: now,
-          // El reloj vuelve a correr desde el rechazo.
-          lateClockStartedAt: now,
           // Sale de "En Revisión": hay trabajo pendiente otra vez.
           status: 'IN_PROGRESS',
           completed: false,
@@ -169,16 +168,20 @@ export const taskCompletionService = {
 
     const settings = await contributionSettingsService.resolve(task.projectId)
     const now = new Date()
-    const lateDays = totalLateDays({
-      dueDate: task.dueDate,
-      lateAccruedDays: Number(task.lateAccruedDays),
-      lateClockStartedAt: task.lateClockStartedAt,
-      now,
-    })
-    const penalty = computePenalty(Number(task.pointsValue), lateDays, settings)
+    const rejections = Math.max(0, task.completionRound - 1)
+    const carryovers = task.carriedOverCount ?? 0
+    const penalty = computeDiscounts(
+      Number(task.pointsValue),
+      { rejections, carryovers },
+      settings
+    )
+    const motivos = [
+      rejections > 0 ? `${rejections} rechazo(s)` : null,
+      carryovers > 0 ? `${carryovers} arrastre(s) de sprint` : null,
+    ].filter(Boolean)
     const note =
       penalty.penalty > 0
-        ? `Valor ${Number(task.pointsValue)} menos ${penalty.penalty} por ${penalty.fullDaysLate} dia(s) de retraso`
+        ? `Valor ${Number(task.pointsValue)} menos ${penalty.penalty} por ${motivos.join(' y ')}`
         : null
 
     await prisma.$transaction(async (tx) => {
@@ -188,8 +191,6 @@ export const taskCompletionService = {
           completionStatus: 'ACCEPTED',
           acceptedAt: now,
           effectivePoints: penalty.effectivePoints,
-          lateAccruedDays: lateDays,
-          lateClockStartedAt: null,
           // Aceptada = hecha. La tarjeta cae sola en la columna final.
           status: 'DONE',
           completed: true,

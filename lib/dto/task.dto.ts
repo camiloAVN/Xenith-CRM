@@ -5,11 +5,14 @@ export const CreateTaskSchema = z.object({
   description: z.string().optional(),
   status: z.enum(['TODO', 'IN_PROGRESS', 'REVIEW', 'DONE', 'BLOCKED']).default('TODO'),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
-  // Asignado y fecha límite son obligatorios: sin asignado no hay a quién
-  // acreditar los puntos, y sin fecha límite no hay penalización que calcular.
-  assignedTo: z.string().min(1, 'Debes asignar la tarea a alguien'),
+  // Desde la Fase 2 la tarea puede nacer SIN asignado: el equipo la estima
+  // primero y se reparte después, en la planeación del sprint. Así nadie vota
+  // sabiendo de quién es, que es lo que anclaba el número.
+  assignedTo: z.string().min(1).optional().nullable(),
   reporterId: z.string().optional().nullable(),
-  dueDate: z.string().min(1, 'La tarea necesita una fecha límite'),
+  dueDate: z.string().min(1).optional().nullable(),
+  // Sprint al que entra. Sin sprint la tarea queda en el backlog.
+  sprintId: z.string().min(1).optional().nullable(),
   estimatedHours: z.number().positive().optional().nullable(),
   actualHours: z.number().min(0).optional().nullable(),
   order: z.number().int().min(0).optional(),
@@ -17,18 +20,19 @@ export const CreateTaskSchema = z.object({
 })
 
 /**
- * Actualización: aquí `assignedTo` y `dueDate` sí pueden venir sueltos o
- * ausentes, pero nunca vaciarse — una tarea ya creada no puede quedarse sin
- * asignado ni sin fecha límite.
+ * Actualización. `assignedTo`, `dueDate` y `sprintId` sí pueden vaciarse
+ * (null): devolver una tarea al backlog o soltar a quien la tenía es parte de
+ * la planeación de un sprint.
  */
 export const UpdateTaskFieldsSchema = z.object({
   title: z.string().min(1).max(255).optional(),
   description: z.string().optional().nullable(),
   status: z.enum(['TODO', 'IN_PROGRESS', 'REVIEW', 'DONE', 'BLOCKED']).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
-  assignedTo: z.string().min(1, 'La tarea necesita un asignado').optional(),
+  assignedTo: z.string().min(1).optional().nullable(),
   reporterId: z.string().optional().nullable(),
-  dueDate: z.string().min(1, 'La tarea necesita una fecha límite').optional(),
+  dueDate: z.string().min(1).optional().nullable(),
+  sprintId: z.string().min(1).optional().nullable(),
   estimatedHours: z.number().positive().optional().nullable(),
   actualHours: z.number().min(0).optional().nullable(),
   order: z.number().int().min(0).optional(),
@@ -48,6 +52,8 @@ export const UpdateTaskSchema = UpdateTaskFieldsSchema
 
 export const TaskFiltersSchema = z.object({
   assignedTo: z.string().optional(),
+  /** Id de sprint, o "backlog" para las que no están en ninguno. */
+  sprintId: z.string().optional(),
   status: z.string().optional(), // comma-separated
   priority: z.string().optional(), // comma-separated
   dueDateFrom: z.string().optional(),

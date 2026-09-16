@@ -40,6 +40,7 @@ model User {
   projectMembers      ProjectMember[]
   earnings            Earning[]                @relation("UserEarnings")
   pointVotes          TaskPointVote[]          @relation("TaskPointVotes")
+  sprintCapacities    SprintCapacity[]         @relation("SprintCapacities")
   taskApprovals       TaskCompletionApproval[] @relation("TaskApprovals")
   pointLedger         PointLedgerEntry[]       @relation("PointLedger")
   pointLedgerAuthored PointLedgerEntry[]       @relation("PointLedgerAuthor")
@@ -139,6 +140,7 @@ model Project {
   earnings             Earning[]
   pointLedger          PointLedgerEntry[]
   contributionSettings ContributionSettings?
+  sprints              Sprint[]
 
   @@index([clientId])
   @@index([assignedTo])
@@ -148,22 +150,27 @@ model Project {
 
 // Task model (sub-tasks for projects) — full Jira-style
 model Task {
-  id             String     @id @default(cuid())
-  projectId      String
-  title          String
-  description    String?    @db.Text
-  status         TaskStatus @default(TODO)
-  priority       Priority   @default(MEDIUM)
-  assignedTo     String?
-  reporterId     String?
-  dueDate        DateTime?
-  estimatedHours Float?
-  actualHours    Float?
-  order          Int        @default(0)
-  tags           String[]   @default([])
-  completed      Boolean    @default(false)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  id               String     @id @default(cuid())
+  projectId        String
+  title            String
+  description      String?    @db.Text
+  status           TaskStatus @default(TODO)
+  priority         Priority   @default(MEDIUM)
+  assignedTo       String?
+  reporterId       String?
+  dueDate          DateTime?
+  estimatedHours   Float?
+  actualHours      Float?
+  order            Int        @default(0)
+  tags             String[]   @default([])
+  // Sprint al que pertenece. null = backlog: la tarea existe y se puede
+  // estimar, pero nadie se ha comprometido a hacerla en una caja de tiempo.
+  sprintId         String?
+  // Veces que la tarea se arrastro a otro sprint. Cada arrastre descuenta.
+  carriedOverCount Int        @default(0)
+  completed        Boolean    @default(false)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   // -- Valoracion por puntos --------------------------------------------
   // La ventana de votacion se abre una sola vez, al crear la tarea, y cierra
@@ -190,6 +197,7 @@ model Task {
 
   // Relations
   project       Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sprint        Sprint?                  @relation(fields: [sprintId], references: [id], onDelete: SetNull)
   assignedUser  User?                    @relation("TaskAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
   reporter      User?                    @relation("TaskReporter", fields: [reporterId], references: [id], onDelete: SetNull)
   comments      TaskComment[]
@@ -203,6 +211,7 @@ model Task {
   @@index([assignedTo])
   @@index([status])
   @@index([dueDate])
+  @@index([sprintId])
   @@map("tasks")
 }
 
@@ -441,18 +450,29 @@ model PointLedgerEntry {
 // configuracion global que edita el dueno; una fila con projectId la
 // sobrescribe para ese proyecto.
 model ContributionSettings {
-  id                String   @id @default(cuid())
-  projectId         String?  @unique
-  minVotes          Int      @default(2)
-  minPoints         Int      @default(2)
-  maxPoints         Int      @default(10)
-  penaltyPerDay     Decimal  @default(0.2) @db.Decimal(5, 2)
-  penaltyFloorRatio Decimal  @default(0.5) @db.Decimal(3, 2)
-  disagreementDelta Int      @default(5)
-  votingWindowHours Int      @default(24)
-  updatedById       String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  projectId             String?  @unique
+  minVotes              Int      @default(2)
+  // Extremos de la escala Fibonacci (1-2-3-5-8-13-21), no un rango continuo.
+  minPoints             Int      @default(1)
+  maxPoints             Int      @default(21)
+  // Penalizacion por dia de la etapa anterior. Se conserva para leer el
+  // historico; los descuentos vigentes son los de sprint (ver task-penalty).
+  penaltyPerDay         Decimal  @default(0.2) @db.Decimal(5, 2)
+  penaltyFloorRatio     Decimal  @default(0.5) @db.Decimal(3, 2)
+  // Desacuerdo medido en PELDANOS de la escala, no en puntos.
+  disagreementDelta     Int      @default(2)
+  votingWindowHours     Int      @default(24)
+  // --- Sprint -----------------------------------------------------------
+  sprintLengthDays      Int      @default(14)
+  defaultCapacityPoints Int      @default(13)
+  /// Descuento por cada arrastre a otro sprint.
+  carryoverPenalty      Decimal  @default(0.2) @db.Decimal(3, 2)
+  /// Descuento por cada rechazo de los jefes.
+  reworkPenalty         Decimal  @default(0.25) @db.Decimal(3, 2)
+  updatedById           String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   updatedBy User?    @relation("SettingsAuthor", fields: [updatedById], references: [id], onDelete: SetNull)
@@ -522,6 +542,49 @@ enum LeadStatus {
   QUALIFIED // Prospecto real
   CONVERTED // Se volvió cliente
   DISCARDED // Descartado
+}
+
+/// Caja de tiempo de dos semanas. Solo un sprint ACTIVE por proyecto.
+model Sprint {
+  id        String       @id @default(cuid())
+  projectId String
+  name      String
+  goal      String?
+  startDate DateTime
+  endDate   DateTime
+  status    SprintStatus @default(PLANNED)
+  closedAt  DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks      Task[]
+  capacities SprintCapacity[]
+
+  @@index([projectId, status])
+  @@map("sprints")
+}
+
+/// Tope de puntos que una persona se compromete a hacer en un sprint.
+model SprintCapacity {
+  id        String   @id @default(cuid())
+  sprintId  String
+  userId    String
+  points    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sprint Sprint @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  user   User   @relation("SprintCapacities", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sprintId, userId])
+  @@map("sprint_capacities")
+}
+
+enum SprintStatus {
+  PLANNED
+  ACTIVE
+  CLOSED
 }
 
 enum TaskValuationStatus {
