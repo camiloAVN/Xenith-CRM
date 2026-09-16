@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/prisma'
 import { getProjectMemberIds } from '@/lib/auth/permissions'
 import { getEligibleVoterIds, getRequiredApproverIds } from '@/lib/services/task-lifecycle'
 import { contributionSettingsService } from '@/lib/services/contribution-settings.service'
+import { allowedScale } from '@/lib/services/point-scale'
 import {
   votingOpenedEmail,
   valuationSettledEmail,
@@ -125,8 +126,7 @@ export const notificationService = {
         votingOpenedEmail({
           ...ctx,
           closesAt,
-          minPoints: settings.minPoints,
-          maxPoints: settings.maxPoints,
+          scale: allowedScale(settings.minPoints, settings.maxPoints),
         })
       )
     } catch (error) {

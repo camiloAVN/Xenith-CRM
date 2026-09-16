@@ -1,4 +1,17 @@
 import { APP_URL, esc, shellStart, shellEnd, footer } from './shell'
+import { SCALE_ANCHORS, describeScale } from '@/lib/services/point-scale'
+
+/**
+ * Las anclas, resumidas para el correo: sin ellas la escala se infla sola.
+ * Solo los extremos y el centro, que es lo que cabe en una frase.
+ */
+function anchorLine(scale: number[]): string {
+  const shown = [scale[0], scale[Math.floor(scale.length / 2)], scale[scale.length - 1]]
+  return shown
+    .filter((v, i, arr) => arr.indexOf(v) === i && SCALE_ANCHORS[v])
+    .map((v) => `${v} = ${SCALE_ANCHORS[v].label.toLowerCase()}`)
+    .join(' · ')
+}
 
 /**
  * Correos del sistema de puntos de aporte.
@@ -75,7 +88,7 @@ function note(text: string): string {
 /* ── 1. Tarea creada — votación de puntos abierta ─────────────────────── */
 
 export function votingOpenedEmail(
-  ctx: TaskEmailContext & { closesAt: Date; minPoints: number; maxPoints: number }
+  ctx: TaskEmailContext & { closesAt: Date; scale: number[] }
 ): string {
   const closes = new Intl.DateTimeFormat('es-CO', {
     day: 'numeric',
@@ -89,7 +102,8 @@ ${header('Xenith · Puntos de aporte', 'Hay una tarea por valorar')}
 ${body(
   taskCard(ctx) +
     note(
-      `Vota cuántos puntos vale esta tarea, entre ${ctx.minPoints} y ${ctx.maxPoints}. La votación cierra el ${closes}. Si no se alcanza el mínimo de votos, la tarea queda en ${ctx.minPoints} puntos.`
+      `Vota el tamaño de esta tarea en la escala ${describeScale(ctx.scale)}: ` +
+        `${anchorLine(ctx.scale)}. La votación cierra el ${closes}; si nadie vota, la tarea queda en ${ctx.scale[0]} punto.`
     )
 )}
 ${cta(ctx.projectId, 'Votar ahora')}

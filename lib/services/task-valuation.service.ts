@@ -10,6 +10,13 @@ import {
 } from '@/lib/services/task-lifecycle'
 import { TaskPermissionError } from '@/lib/services/task.service'
 import { notificationService } from '@/lib/services/notification.service'
+import {
+  allowedScale,
+  describeScale,
+  isOnScale,
+  snapToScale,
+  stepsBetween,
+} from '@/lib/services/point-scale'
 
 /**
  * Valoración por puntos: la ventana de votación y su cierre.
@@ -17,13 +24,16 @@ import { notificationService } from '@/lib/services/notification.service'
  * La ventana se abre UNA vez, al crear la tarea, y cierra por lo que ocurra
  * primero:
  *   - votaron todos los elegibles  -> cierra de inmediato con la mediana;
- *   - se vencieron las 24h         -> mediana si hubo quórum, y si no, el
- *                                     mínimo del rango (2 por defecto).
+ *   - se venció el plazo           -> mediana de los votos que haya, y si no
+ *                                     hubo ninguno, el mínimo de la escala.
  *
  * No se extiende ni se reabre.
+ *
+ * El valor que queda SIEMPRE pertenece a la escala Fibonacci: la mediana cruda
+ * puede caer entre dos peldaños (3 y 8 dan 5.5) y se pega al más cercano.
  */
 
-/** Mediana sin redondear: con número par de votos puede dar 4.5 y así queda. */
+/** Mediana cruda. Con número par de votos puede caer entre dos peldaños. */
 export function calculateMedian(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b)
   const mid = Math.floor(sorted.length / 2)
@@ -35,14 +45,17 @@ export interface ValuationOutcome {
   needsDiscussion: boolean
   reachedQuorum: boolean
   voteCount: number
+  /** El valor quedó en el tope de la escala: es una épica y hay que partirla. */
+  isEpic: boolean
 }
 
 /**
  * Valor final de una tarea a partir de sus votos.
  *
- * `votes.length > 0` es una guarda aparte del quórum: cuando no hay votantes
- * elegibles el quórum efectivo es 0, y sin ella `0 >= 0` daría por bueno un
- * conjunto vacío y la mediana sería NaN.
+ * Sin ningún voto no hay nada que promediar y la tarea toma el mínimo de la
+ * escala. Con votos pero sin quórum SÍ se usa su mediana: castigar al asignado
+ * porque un compañero no votó es cobrarle algo que no está en sus manos; el
+ * resultado queda marcado como "sin quórum" para que se vea de dónde salió.
  */
 export function computeValuation(
   votes: number[],
@@ -50,23 +63,30 @@ export function computeValuation(
   eligibleVoterCount: number
 ): ValuationOutcome {
   const quorum = effectiveQuorum(settings.minVotes, eligibleVoterCount)
+  const scale = allowedScale(settings.minPoints, settings.maxPoints)
 
-  if (votes.length === 0 || votes.length < quorum) {
+  if (votes.length === 0) {
     return {
-      pointsValue: settings.minPoints,
+      pointsValue: scale[0],
       needsDiscussion: false,
       reachedQuorum: false,
-      voteCount: votes.length,
+      voteCount: 0,
+      isEpic: false,
     }
   }
 
-  const spread = Math.max(...votes) - Math.min(...votes)
+  const pointsValue = snapToScale(calculateMedian(votes), scale)
+  // El desacuerdo se mide en peldaños de la escala, no en puntos: entre 13 y 21
+  // hay 8 puntos de diferencia y solo un paso.
+  const spread = stepsBetween(Math.min(...votes), Math.max(...votes), scale)
+
   return {
-    pointsValue: calculateMedian(votes),
+    pointsValue,
     // Aviso informativo: la mediana igual aplica, solo marca la tarjeta.
     needsDiscussion: spread >= settings.disagreementDelta,
-    reachedQuorum: true,
+    reachedQuorum: votes.length >= quorum,
     voteCount: votes.length,
+    isEpic: pointsValue >= scale[scale.length - 1] && scale.length > 1,
   }
 }
 
@@ -92,10 +112,11 @@ export const taskValuationService = {
 
     const settings = await contributionSettingsService.resolve(task.projectId)
 
-    if (!Number.isInteger(value) || value < settings.minPoints || value > settings.maxPoints) {
-      throw new TaskPermissionError(
-        `El voto debe ser un entero entre ${settings.minPoints} y ${settings.maxPoints}`
-      )
+    // El voto tiene que caer en un peldaño de la escala, no en cualquier número
+    // del rango: un 7 no significa nada en Fibonacci.
+    const scale = allowedScale(settings.minPoints, settings.maxPoints)
+    if (!Number.isInteger(value) || !isOnScale(value, scale)) {
+      throw new TaskPermissionError(`El voto debe ser ${describeScale(scale)}`)
     }
 
     const eligible = await getEligibleVoterIds(task.projectId, task.assignedTo)
@@ -256,6 +277,10 @@ export const taskValuationService = {
       votingClosesAt: task.votingClosesAt,
       minPoints: settings.minPoints,
       maxPoints: settings.maxPoints,
+      scale: allowedScale(settings.minPoints, settings.maxPoints),
+      isEpic:
+        task.pointsValue != null &&
+        Number(task.pointsValue) >= allowedScale(settings.minPoints, settings.maxPoints).slice(-1)[0],
       quorum: effectiveQuorum(settings.minVotes, eligible.length),
       eligibleVoterCount: eligible.length,
       voteCount: votes.length,

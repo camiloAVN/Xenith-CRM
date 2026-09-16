@@ -17,14 +17,26 @@ export interface ContributionSettings {
   votingWindowHours: number
 }
 
-/** Fallback si la fila global llegara a faltar. Coincide con los @default. */
+/**
+ * Fallback si la fila global llegara a faltar.
+ *
+ * `minPoints` / `maxPoints` son los extremos de la escala Fibonacci (1 y 21),
+ * no un rango continuo: los valores que se pueden votar salen de
+ * `allowedScale()` en `point-scale.ts`.
+ *
+ * `disagreementDelta` se mide en PELDAÑOS de la escala (2 = dos saltos, por
+ * ejemplo 3 contra 8), no en puntos.
+ *
+ * Los `@default` del schema siguen en los valores viejos (2–10, delta 5) hasta
+ * la migración de la Fase 2; la fila global ya está en estos números.
+ */
 export const DEFAULT_SETTINGS: ContributionSettings = {
   minVotes: 2,
-  minPoints: 2,
-  maxPoints: 10,
+  minPoints: 1,
+  maxPoints: 21,
   penaltyPerDay: 0.2,
   penaltyFloorRatio: 0.5,
-  disagreementDelta: 5,
+  disagreementDelta: 2,
   votingWindowHours: 24,
 }
 

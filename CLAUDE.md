@@ -113,6 +113,8 @@ Prisma ORM + PostgreSQL. Cliente singleton en `lib/db/prisma.ts`.
 
 **Enums:** `TaskStatus` (TODO, IN_PROGRESS, REVIEW, DONE, BLOCKED), `TaskValuationStatus` (VOTING, EXTENDED, VALUED), `TaskCompletionStatus` (PENDING, SUBMITTED, ACCEPTED), `PointLedgerType` (TASK_ACCEPTED, TASK_REVERTED, SEED, ADJUSTMENT), `ProjectRole`, `Priority`, `ProjectStatus`, `QuotationStatus`, `UserRole`, `EarningType`, `LeadSource`, `LeadStatus`.
 
+**Parámetros vigentes** (fila `global` de `ContributionSettings`, actualizada el 16-sep-2026): `minPoints = 1`, `maxPoints = 21`, `disagreementDelta = 2`. Los `@default` del schema siguen en los valores viejos (2, 10, 5) hasta la migración de la Fase 2; `DEFAULT_SETTINGS` en el servicio ya tiene los nuevos.
+
 `EXTENDED` está en el enum pero **no se usa**: la extensión automática de la ventana se descartó por decisión del dueño.
 
 ---
@@ -163,11 +165,13 @@ Se reabre aceptada   → IN_PROGRESS · asiento negativo TASK_REVERTED
 ### Votación
 
 - Vota todo el equipo **menos el asignado**.
+- **Escala Fibonacci 1-2-3-5-8-13-21** (`lib/services/point-scale.ts`), con **anclas** fijas por peldaño (qué significa un 5 en tiempo real de trabajo). Las anclas se muestran al votar y en el correo: una escala sin anclas se infla sola.
 - **Cierra por lo que ocurra primero:** votan todos los elegibles → cierra de inmediato; o vence el plazo (24h configurables).
-- Valor = **mediana sin redondear** (con 2 votos puede dar 4.5).
+- Valor = **mediana pegada al peldaño más cercano** (`snapToScale`). Los empates **bajan**: entre 8 y 13 se acredita 8, que es la dirección que no premia inflar. El ledger solo guarda valores de la escala.
 - Quórum efectivo = `min(minVotes, votantes elegibles)`. Sin él, un equipo de 2 nunca alcanzaría `minVotes = 2`.
-- Sin quórum al vencer → `minPoints` (2).
-- `needsDiscussion` si `max - min >= disagreementDelta`. Es **informativo**, no bloquea.
+- **Sin quórum pero con votos → se usa igual su mediana**, marcada `reachedQuorum: false`. Castigar al asignado porque un compañero no votó es cobrarle algo que no está en sus manos. Solo con CERO votos cae al mínimo de la escala (1).
+- `needsDiscussion` si los votos quedan a **2 peldaños o más** (`disagreementDelta` se mide en pasos de la escala, no en puntos: entre 13 y 21 hay 8 puntos y un solo paso). Es **informativo**, no bloquea.
+- `isEpic` cuando el valor queda en el tope (21): la tarjeta pide partirla. En la Fase 2 (sprints) además se bloqueará meterla a un sprint.
 - Un voto por persona, corregible mientras la ventana siga abierta. **No hay reapertura.**
 - Los votos individuales se revelan **al cerrar**; durante la votación solo se ve el conteo, para no anclar a quien falta.
 
@@ -199,6 +203,7 @@ El dueño puede crear asientos `ADJUSTMENT` a mano (positivos o negativos) desde
 ```
 lib/auth/permissions.ts                       Roles: getProjectPermissions, getProjectLeadIds, getProjectMemberIds
 lib/services/task-lifecycle.ts                Máquina de estados: guardas puras + elegibilidad de votantes/aprobadores
+lib/services/point-scale.ts                   Escala Fibonacci, anclas, snapToScale, pasos de desacuerdo
 lib/services/task-valuation.service.ts        Mediana, quórum, castVote, settleTask (idempotente)
 lib/services/task-completion.service.ts       Aprobación/rechazo, aceptación, ledger, reopen
 lib/services/task-penalty.ts                  Reloj de retraso, penalización, buildPenaltyPreview
@@ -405,6 +410,23 @@ ssh railway-postgres 'psql -U postgres -d reto -q' < agente/sql/03-logic.sql   #
 - **Cada uno debe abrir el chat privado con @Xenith26_bot y darle Iniciar**, o los avisos y recordatorios por privado no le llegan (Telegram no deja escribir primero).
 - El cron de cierre de votaciones de Xenith (ver "Cron" arriba) puede dispararlo n8n con un Schedule + HTTP a `/api/v1/cron/close-voting` con `Bearer CRON_SECRET`. Aún no se hizo.
 - Cierre del año: veredicto por meta (`veredictos_finales`) y cálculo final de la penitencia con la exoneración por puntos.
+
+## Hacia Scrum (decidido con el equipo el 16-sep-2026)
+
+Propuesta completa: artefacto "Sistema de aporte Xenith" (`https://claude.ai/artifact/RR2VhxLMY5dsBh7Uemd9zG`). Lo acordado:
+
+- **Reparto del neto de cada proyecto: 25 % empresa · 15 % fundador · 60 % pozo por puntos.** Hoy el código reparte el 100 % por puntos (`contribution.service`): eso cambia en la Fase 3.
+- **Tope individual del 45 %** del pozo de un proyecto.
+- Sprint de **2 semanas**, capacidad de **8–13 puntos por persona**, descuento de **20 %** al arrastrar y **25 %** por cada rechazo (piso 50 %).
+- **Estimar antes de asignar**: la tarea nace sin dueño, el equipo la valora y se asigna en la planeación. Hoy `CreateTaskSchema` exige `assignedTo`; cambia en la Fase 2.
+
+| Fase | Qué | Estado |
+|---|---|---|
+| 1 | Escala Fibonacci, anclas, redondeo, aviso de épica | **hecha** (sin migración) |
+| 2 | Sprints, capacidad, arrastre/retrabajo, estimar antes de asignar, velocidad | pendiente — necesita migración |
+| 3 | Capas del dinero, liquidación congelada por ingreso, tope del 45 % | pendiente — necesita migración y acuerdo escrito de los tres |
+
+La penalización de −0,2 por día sigue activa; la reemplazan los descuentos de sprint en la Fase 2.
 
 ## Pendientes conocidos
 
