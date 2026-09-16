@@ -44,6 +44,8 @@ model User {
   taskApprovals       TaskCompletionApproval[] @relation("TaskApprovals")
   pointLedger         PointLedgerEntry[]       @relation("PointLedger")
   pointLedgerAuthored PointLedgerEntry[]       @relation("PointLedgerAuthor")
+  payoutShares        PayoutShare[]            @relation("PayoutShares")
+  payoutsCreated      Payout[]                 @relation("PayoutAuthor")
   settingsUpdated     ContributionSettings[]   @relation("SettingsAuthor")
 
   @@map("users")
@@ -138,6 +140,7 @@ model Project {
   tasks                Task[]
   members              ProjectMember[]
   earnings             Earning[]
+  payouts              Payout[]
   pointLedger          PointLedgerEntry[]
   contributionSettings ContributionSettings?
   sprints              Sprint[]
@@ -470,6 +473,15 @@ model ContributionSettings {
   carryoverPenalty      Decimal  @default(0.2) @db.Decimal(3, 2)
   /// Descuento por cada rechazo de los jefes.
   reworkPenalty         Decimal  @default(0.25) @db.Decimal(3, 2)
+  // --- Reparto del dinero -----------------------------------------------
+  // La capa de la empresa NO se guarda: es el resto (1 - fundador - pozo), y
+  // asi las tres siempre suman exactamente el neto.
+  /// Capital y tiempo que el fundador puso antes del sistema de puntos.
+  founderRatio          Decimal  @default(0.15) @db.Decimal(4, 3)
+  /// Parte que se reparte por puntos del ledger.
+  poolRatio             Decimal  @default(0.6) @db.Decimal(4, 3)
+  /// Tope de lo que una sola persona puede llevarse del pozo de un proyecto.
+  maxIndividualShare    Decimal  @default(0.45) @db.Decimal(4, 3)
   updatedById           String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -542,6 +554,55 @@ enum LeadStatus {
   QUALIFIED // Prospecto real
   CONVERTED // Se volvió cliente
   DISCARDED // Descartado
+}
+
+/// Liquidacion de un ingreso: congela el reparto del dia en que entro la plata.
+///
+/// Sin esto el porcentaje seria "vivo" y un punto ganado manana cambiaria el
+/// reparto de un dinero ya pagado. Cada liquidacion es inmutable; la siguiente
+/// usa el ledger actualizado.
+model Payout {
+  id            String   @id @default(cuid())
+  projectId     String
+  description   String
+  /// Neto del proyecto que cubre esta liquidacion.
+  netAmount     Decimal  @db.Decimal(14, 2)
+  companyAmount Decimal  @db.Decimal(14, 2)
+  founderAmount Decimal  @db.Decimal(14, 2)
+  poolAmount    Decimal  @db.Decimal(14, 2)
+  /// Ratios aplicados, guardados para poder auditar liquidaciones viejas.
+  founderRatio  Decimal  @db.Decimal(4, 3)
+  poolRatio     Decimal  @db.Decimal(4, 3)
+  founderUserId String?
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?         @relation("PayoutAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+  shares    PayoutShare[]
+
+  @@index([projectId])
+  @@map("payouts")
+}
+
+/// Lo que le toco a una persona en una liquidacion, con los puntos que tenia
+/// en ese momento. Es la foto que hace auditable cada pago.
+model PayoutShare {
+  id         String  @id @default(cuid())
+  payoutId   String
+  userId     String
+  points     Decimal @db.Decimal(8, 2)
+  /// Porcentaje del pozo, 0-100, ya con el tope individual aplicado.
+  percentage Decimal @db.Decimal(6, 3)
+  amount     Decimal @db.Decimal(14, 2)
+  /// true si el tope individual le recorto la parte.
+  capped     Boolean @default(false)
+
+  payout Payout @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  user   User   @relation("PayoutShares", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([payoutId, userId])
+  @@map("payout_shares")
 }
 
 /// Caja de tiempo de dos semanas. Solo un sprint ACTIVE por proyecto.

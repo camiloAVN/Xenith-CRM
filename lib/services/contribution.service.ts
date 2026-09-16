@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/db/prisma'
 import { getProjectMemberIds } from '@/lib/auth/permissions'
 import { TaskPermissionError } from '@/lib/services/task.service'
+import { contributionSettingsService } from '@/lib/services/contribution-settings.service'
+import { splitLayers, splitPool } from '@/lib/services/profit-split'
 
 /**
  * Cálculo del porcentaje de aporte y del reparto.
@@ -24,8 +26,10 @@ export interface MemberContribution {
   points: number
   /** Porcentaje sobre el total del proyecto, 0-100. */
   percentage: number
-  /** Parte del pozo repartible que le corresponde. */
+  /** Parte del pozo que le corresponde si se liquidara hoy, con el tope aplicado. */
   share: number
+  /** true si el tope individual le recortó la parte. */
+  capped: boolean
   /** false si ya no pertenece al proyecto pero conserva su saldo. */
   isCurrentMember: boolean
   entryCount: number
@@ -34,8 +38,20 @@ export interface MemberContribution {
 export interface ProjectContributions {
   projectId: string
   totalPoints: number
-  /** Pozo repartible: ingresos menos deducciones del proyecto. */
+  /** Pozo repartible por puntos: la capa `poolRatio` de lo que falta liquidar. */
   pool: number
+  /** Neto del proyecto: ingresos menos deducciones. */
+  net: number
+  /** Neto que todavía no se ha liquidado. */
+  available: number
+  /** Ya repartido en liquidaciones anteriores. */
+  distributed: number
+  /** Reserva de la empresa sobre lo disponible (incluye el sobrante del tope). */
+  company: number
+  /** Capa del fundador sobre lo disponible. */
+  founder: number
+  founderUserId: string | null
+  maxIndividualShare: number
   income: number
   deductions: number
   members: MemberContribution[]
@@ -123,7 +139,8 @@ export const contributionService = {
   },
 
   async getProjectContributions(projectId: string): Promise<ProjectContributions> {
-    const [ledgerByUser, income, deductions, currentMemberIds, pending] = await Promise.all([
+    const [ledgerByUser, income, deductions, currentMemberIds, pending, settings, previous, founder] =
+      await Promise.all([
       prisma.pointLedgerEntry.groupBy({
         by: ['userId'],
         where: { projectId },
@@ -150,13 +167,24 @@ export const contributionService = {
         },
         select: { pointsValue: true },
       }),
+      contributionSettingsService.resolve(projectId),
+      prisma.payout.aggregate({ where: { projectId }, _sum: { netAmount: true } }),
+      prisma.user.findFirst({
+        where: { role: 'SUPERADMIN', isActive: true },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      }),
     ])
 
     // Las deducciones se guardan en negativo; el módulo de ganancias las
     // presenta en positivo y resta. Se replica esa convención.
     const incomeTotal = Number(income._sum.amount ?? 0)
     const deductionTotal = Math.abs(Number(deductions._sum.amount ?? 0))
-    const pool = round2(incomeTotal - deductionTotal)
+    const net = round2(incomeTotal - deductionTotal)
+    const distributed = round2(Number(previous._sum.netAmount ?? 0))
+    // Solo se muestra lo que falta por repartir: lo ya liquidado quedó
+    // congelado en su propia foto y no se vuelve a calcular.
+    const available = round2(Math.max(0, net - distributed))
 
     const rows = ledgerByUser.map((row) => ({
       userId: row.userId,
@@ -165,6 +193,12 @@ export const contributionService = {
     }))
 
     const totalPoints = round2(rows.reduce((acc, r) => acc + r.points, 0))
+
+    // El dinero se corta en capas ANTES de mirar los puntos, y el pozo lleva
+    // encima el tope individual.
+    const layers = splitLayers(available, settings)
+    const split = splitPool(layers.pool, rows, settings.maxIndividualShare)
+    const shareByUser = new Map(split.shares.map((s) => [s.userId, s]))
 
     const users = rows.length
       ? await prisma.user.findMany({
@@ -179,6 +213,7 @@ export const contributionService = {
       .map((row) => {
         // Con total 0 no hay reparto posible; evita dividir por cero.
         const percentage = totalPoints > 0 ? round2((row.points / totalPoints) * 100) : 0
+        const cut = shareByUser.get(row.userId)
         return {
           userId: row.userId,
           user: userById.get(row.userId) ?? {
@@ -189,7 +224,8 @@ export const contributionService = {
           },
           points: row.points,
           percentage,
-          share: round2((pool * percentage) / 100),
+          share: cut?.amount ?? 0,
+          capped: cut?.capped ?? false,
           isCurrentMember: memberSet.has(row.userId),
           entryCount: row.entryCount,
         }
@@ -199,7 +235,15 @@ export const contributionService = {
     return {
       projectId,
       totalPoints,
-      pool,
+      pool: layers.pool,
+      net,
+      available,
+      distributed,
+      // El sobrante que deja el tope individual se queda en la reserva.
+      company: round2(layers.company + split.unassigned),
+      founder: layers.founder,
+      founderUserId: founder?.id ?? null,
+      maxIndividualShare: settings.maxIndividualShare,
       income: round2(incomeTotal),
       deductions: round2(deductionTotal),
       members,

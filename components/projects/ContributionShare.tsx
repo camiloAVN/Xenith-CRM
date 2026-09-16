@@ -10,12 +10,19 @@ interface MemberContribution {
   points: number
   percentage: number
   share: number
+  capped?: boolean
   isCurrentMember: boolean
 }
 
 interface Contributions {
   totalPoints: number
   pool: number
+  net?: number
+  available?: number
+  distributed?: number
+  company?: number
+  founder?: number
+  maxIndividualShare?: number
   income: number
   deductions: number
   members: MemberContribution[]
@@ -80,7 +87,9 @@ export function ContributionShare({ projectId, refreshKey = 0 }: ContributionSha
         </span>
         <span className="text-xs text-gray-500 tabular-nums">
           {data.totalPoints} puntos repartidos
-          {data.pool > 0 && ` · pozo ${currency.format(data.pool)}`}
+          {/* El pozo ya viene descontadas la reserva de la empresa y la capa
+              del fundador: es lo que de verdad se reparte por puntos. */}
+          {data.pool > 0 && ` · pozo por puntos ${currency.format(data.pool)}`}
         </span>
       </div>
 

@@ -8,6 +8,7 @@ import { MemberPointsChart } from '@/components/charts/MemberPointsChart'
 import { MonthlyPointsChart } from '@/components/charts/MonthlyPointsChart'
 import { MemberTrendCard, type MemberTrendData } from '@/components/charts/MemberTrendCard'
 import { PointAdjustments } from '@/components/projects/PointAdjustments'
+import { PayoutPanel } from '@/components/projects/PayoutPanel'
 import { buildColorMap } from '@/lib/utils/chart-palette'
 
 interface Metrics {
@@ -202,6 +203,9 @@ export default function ProjectContributionsPage({
           )}
         </div>
       </div>
+
+      {/* Las tres capas del dinero y las liquidaciones ya congeladas. */}
+      <PayoutPanel projectId={id} />
 
       {/* Asignación manual de puntos — el dueño puede repartir a discreción. */}
       <PointAdjustments projectId={id} onChanged={load} />

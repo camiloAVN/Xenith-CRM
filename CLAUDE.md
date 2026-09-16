@@ -108,6 +108,7 @@ Prisma ORM + PostgreSQL. Cliente singleton en `lib/db/prisma.ts`.
 - `TaskPointVote` — voto de valoración. `@@unique([taskId, userId])`.
 - `TaskCompletionApproval` — aprobación/rechazo de un jefe. `@@unique([taskId, userId, round])`.
 - `PointLedgerEntry` — **ledger append-only** de puntos por proyecto.
+- `Payout` + `PayoutShare` — **liquidación congelada**: la foto del reparto el día que entró la plata. Inmutable.
 - `ContributionSettings` — parámetros; `projectId = null` es la fila global (`id = 'global'`).
 - `Quotation` + `QuotationItem` — auto-numeradas `QT-YYYY-NNNN`.
 - `Earning` — dinero por proyecto (`COMPANY_INCOME`, `DEDUCTION`, `USER_EARNING`).
@@ -115,7 +116,9 @@ Prisma ORM + PostgreSQL. Cliente singleton en `lib/db/prisma.ts`.
 
 **Enums:** `TaskStatus` (TODO, IN_PROGRESS, REVIEW, DONE, BLOCKED), `TaskValuationStatus` (VOTING, EXTENDED, VALUED), `TaskCompletionStatus` (PENDING, SUBMITTED, ACCEPTED), `SprintStatus` (PLANNED, ACTIVE, CLOSED), `PointLedgerType` (TASK_ACCEPTED, TASK_REVERTED, SEED, ADJUSTMENT), `ProjectRole`, `Priority`, `ProjectStatus`, `QuotationStatus`, `UserRole`, `EarningType`, `LeadSource`, `LeadStatus`.
 
-**Parámetros vigentes** (fila `global` de `ContributionSettings`): `minPoints = 1`, `maxPoints = 21`, `disagreementDelta = 2` (peldaños), `sprintLengthDays = 14`, `defaultCapacityPoints = 13`, `carryoverPenalty = 0.2`, `reworkPenalty = 0.25`, `penaltyFloorRatio = 0.5`. Los `@default` del schema ya coinciden. `penaltyPerDay` queda solo para leer el histórico.
+**Parámetros vigentes** (fila `global` de `ContributionSettings`): `minPoints = 1`, `maxPoints = 21`, `disagreementDelta = 2` (peldaños), `sprintLengthDays = 14`, `defaultCapacityPoints = 13`, `carryoverPenalty = 0.2`, `reworkPenalty = 0.25`, `penaltyFloorRatio = 0.5`, `founderRatio = 0.15`, `poolRatio = 0.6`, `maxIndividualShare = 0.45`. Los `@default` del schema ya coinciden. `penaltyPerDay` queda solo para leer el histórico.
+
+**La capa de la empresa NO se guarda**: es el resto (`1 − founderRatio − poolRatio`), y así las tres suman exactamente el neto sin poder desincronizarse.
 
 `EXTENDED` está en el enum pero **no se usa**: la extensión automática de la ventana se descartó por decisión del dueño.
 
@@ -190,13 +193,33 @@ Desde la Fase 2 la referencia es el **sprint**, no la fecha límite.
 - **`dueDate` ya no penaliza**: es informativa (se pinta roja al vencer) y puede quedar vacía. Las columnas `lateAccruedDays` / `lateClockStartedAt` siguen en la base para leer el histórico; **nada nuevo las escribe**.
 - **La tarea puede nacer sin asignado** (backlog estimado): el equipo la valora y se reparte en la planeación. `CreateTaskSchema` ya no exige `assignedTo` ni `dueDate`.
 
-### Ledger y porcentajes
+### Ledger, capas y reparto
 
 ```
+neto        = COMPANY_INCOME − |DEDUCTION|        (misma fórmula que /api/ganancias)
+disponible  = neto − lo ya liquidado (suma de Payout.netAmount)
+
+sobre lo disponible:
+  fundador  = disponible × founderRatio   (15 %)
+  pozo      = disponible × poolRatio      (60 %)
+  empresa   = el resto                    (25 %) + lo que sobre por el tope
+
 % de un miembro = sus puntos en el ledger ÷ total del ledger del proyecto
-reparto         = pozo × %
-pozo            = COMPANY_INCOME − |DEDUCTION|   (misma fórmula que /api/ganancias)
+reparto         = pozo × %, con tope de maxIndividualShare (45 %) por persona
 ```
+
+**El tope individual** recorta a quien pase del 45 % del pozo y redistribuye el excedente entre los demás en proporción a sus puntos; se repite porque redistribuir puede empujar a otro contra el tope. Si ya nadie puede recibirlo, el sobrante se queda en la reserva de la empresa: nunca se evapora ni descuadra la suma.
+
+**La capa del fundador** va al `SUPERADMIN` activo más antiguo, aparte de lo que le toque por sus propios puntos. Es explícitamente temporal (baja a 0 cuando haya salarios); por eso es un parámetro y no una regla del código.
+
+### Liquidaciones (congelar el reparto)
+
+El porcentaje de aporte es **vivo**: cambia con cada tarea aceptada. Un pago no puede serlo, así que al liquidar se fotografían puntos y porcentajes de ese día en `Payout` + `PayoutShare`, y la fila **no se vuelve a calcular nunca**. La siguiente liquidación usa el ledger actualizado.
+
+- Solo el **dueño** liquida (`payoutService.create`). Sin `amount` reparte todo lo disponible; con él, solo esa parte (un anticipo).
+- Cada liquidación escribe un `Earning` de tipo `USER_EARNING` por persona — más otro para el retorno del fundador — que es lo que ya lee el módulo de ganancias. Todo en una transacción.
+- `payoutService.preview()` hace el MISMO cálculo sin escribir: es lo que muestra la pantalla antes de confirmar.
+- Quien entra después no diluye lo ya repartido, y quien se va conserva lo que ya cobró.
 
 El ledger es **append-only**. Eso resuelve dos casos de golpe:
 - **Tarea reabierta** → asiento negativo `TASK_REVERTED`; el original no se borra.
@@ -214,7 +237,9 @@ lib/services/task-valuation.service.ts        Mediana, quórum, castVote, settle
 lib/services/task-completion.service.ts       Aprobación/rechazo, aceptación, ledger, reopen
 lib/services/task-penalty.ts                  Descuentos por rechazo y arrastre, buildPenaltyPreview
 lib/services/sprint.service.ts                Sprints: crear, arrancar, cerrar con arrastre, capacidad, velocidad
-lib/services/contribution.service.ts          %, reparto, ajustes manuales
+lib/services/profit-split.ts                  Capas del neto y tope individual (cálculo puro)
+lib/services/payout.service.ts                Liquidaciones: preview, create (congela), list
+lib/services/contribution.service.ts          %, reparto en vivo, ajustes manuales
 lib/services/contribution-metrics.service.ts  Serie mensual, mejor mes, tendencia
 lib/services/contribution-settings.service.ts Parámetros: override de proyecto → global → defaults
 lib/services/notification.service.ts          Los 5 correos (Resend)
@@ -228,6 +253,7 @@ components/projects/SprintBar.tsx             Sprint activo, capacidad por perso
 components/projects/TaskPointsBadge.tsx       Chip de puntos, compartido por las 3 vistas
 components/projects/ContributionShare.tsx     Panel de reparto en la página del proyecto
 components/projects/PointAdjustments.tsx      Asignación manual (solo dueño)
+components/projects/PayoutPanel.tsx           Capas del dinero, simulación y liquidaciones congeladas
 components/charts/                            MemberPointsChart, MonthlyPointsChart, MemberTrendCard
 app/(dashboard)/dashboard/proyectos/[id]/aportes/   Ventana de gráficos y métricas
 ```
@@ -235,6 +261,7 @@ app/(dashboard)/dashboard/proyectos/[id]/aportes/   Ventana de gráficos y métr
 ### Invariantes que se rompen fácil
 
 1. **El % y las métricas salen del ledger, nunca de las tareas.** Calcularlos desde `Task` pierde las reversiones y borra a quien salió del equipo.
+1b. **Una `Payout` no se recalcula jamás.** Es la foto de un pago; si hay que corregir, se hace otra liquidación (o un ajuste de puntos), nunca se edita la vieja.
 2. **Nunca borres un asiento del ledger.** Escribe el opuesto.
 3. **`settleTask()` sin `{ force: true }` solo liquida ventanas YA vencidas.** La ruta de votos la llama preventivamente en cada lectura; sin esa guarda, la primera consulta cerraría toda votación abierta. `force` es exclusivo del cierre anticipado cuando ya votaron todos.
 4. **Las notificaciones son fire-and-forget** (`void notificationService.x(...)`) y atrapan sus propios errores. Notificar nunca puede tumbar la operación.
@@ -273,6 +300,7 @@ GET/PUT         /api/v1/projects/[id]/sprints/[sprintId]         # PUT edita el 
 POST            /api/v1/projects/[id]/sprints/[sprintId]/start
 POST            /api/v1/projects/[id]/sprints/[sprintId]/close   # arrastra lo no aceptado
 GET             /api/v1/projects/[id]/sprints/velocity
+GET/POST        /api/v1/projects/[id]/payouts                    # liquidaciones + simulación · POST solo dueño
 GET             /api/v1/projects/[id]/contributions              # %, reparto, pendientes
 GET             /api/v1/projects/[id]/contributions/metrics      # serie mensual, tendencia
 GET/POST        /api/v1/projects/[id]/contributions/adjustments  # POST solo dueño
@@ -437,7 +465,7 @@ Propuesta completa: artefacto "Sistema de aporte Xenith" (`https://claude.ai/art
 |---|---|---|
 | 1 | Escala Fibonacci, anclas, redondeo, aviso de épica | **hecha** (sin migración) |
 | 2 | Sprints, capacidad, arrastre/retrabajo, estimar antes de asignar, velocidad | **hecha** (migración `20260916150000_fase2_sprints` aplicada el 16-sep-2026) |
-| 3 | Capas del dinero, liquidación congelada por ingreso, tope del 45 % | pendiente — necesita migración y acuerdo escrito de los tres |
+| 3 | Capas del dinero, liquidación congelada por ingreso, tope del 45 % | **hecha** (migración `20260916180000_fase3_reparto` aplicada el 16-sep-2026) |
 
 La penalización de −0,2 por día **ya no se aplica**: la reemplazaron los descuentos por arrastre y retrabajo.
 

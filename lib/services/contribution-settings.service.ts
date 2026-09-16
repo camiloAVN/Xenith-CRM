@@ -24,6 +24,12 @@ export interface ContributionSettings {
   carryoverPenalty: number
   /** Descuento por cada rechazo de los jefes. */
   reworkPenalty: number
+  /** Capa del fundador sobre el neto del proyecto. */
+  founderRatio: number
+  /** Capa que se reparte por puntos. La empresa se queda con el resto. */
+  poolRatio: number
+  /** Tope de lo que una sola persona puede llevarse del pozo. */
+  maxIndividualShare: number
 }
 
 /**
@@ -48,6 +54,9 @@ export const DEFAULT_SETTINGS: ContributionSettings = {
   defaultCapacityPoints: 13,
   carryoverPenalty: 0.2,
   reworkPenalty: 0.25,
+  founderRatio: 0.15,
+  poolRatio: 0.6,
+  maxIndividualShare: 0.45,
 }
 
 type SettingsRow = {
@@ -62,6 +71,9 @@ type SettingsRow = {
   defaultCapacityPoints: number
   carryoverPenalty: unknown
   reworkPenalty: unknown
+  founderRatio: unknown
+  poolRatio: unknown
+  maxIndividualShare: unknown
 }
 
 function toSettings(row: SettingsRow): ContributionSettings {
@@ -77,6 +89,9 @@ function toSettings(row: SettingsRow): ContributionSettings {
     defaultCapacityPoints: row.defaultCapacityPoints,
     carryoverPenalty: Number(row.carryoverPenalty),
     reworkPenalty: Number(row.reworkPenalty),
+    founderRatio: Number(row.founderRatio),
+    poolRatio: Number(row.poolRatio),
+    maxIndividualShare: Number(row.maxIndividualShare),
   }
 }
 
