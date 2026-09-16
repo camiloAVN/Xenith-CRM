@@ -46,3 +46,8 @@ next-env.d.ts
 CLAUDE.md
 
 backup.sql
+
+# agente de Telegram (secretos y datos personales)
+N8NTOKEN.txt
+METAS.txt
+agente/sql/02-seed.sql

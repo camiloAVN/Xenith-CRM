@@ -1,0 +1,46 @@
+{
+  "name": "Reto · Entrada Telegram",
+  "settings": { "executionOrder": "v1", "timezone": "America/Bogota" },
+  "nodes": [
+    {
+      "id": "b1b2c3d4-0002-4000-8000-000000000001",
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "webhookId": "5f0c2a8e-7c1d-4b7a-9a51-3e1f0d2b7c11",
+      "parameters": { "updates": ["message", "callback_query"], "additionalFields": {} },
+      "credentials": { "telegramApi": { "id": "__TG_ID__", "name": "Telegram Reto" } }
+    },
+    {
+      "id": "b1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Procesar en la base",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [240, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select fn_procesar_update($1::jsonb) as acts",
+        "options": { "queryReplacement": "={{ [ $json ] }}" }
+      },
+      "credentials": { "postgres": { "id": "__PG_ID__", "name": "Postgres Reto" } }
+    },
+    {
+      "id": "b1b2c3d4-0002-4000-8000-000000000003",
+      "name": "Ejecutar acciones",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [480, 0],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "value": "__SUB_ID__", "mode": "id" },
+        "mode": "once",
+        "options": { "waitForSubWorkflow": true }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram": { "main": [[{ "node": "Procesar en la base", "type": "main", "index": 0 }]] },
+    "Procesar en la base": { "main": [[{ "node": "Ejecutar acciones", "type": "main", "index": 0 }]] }
+  }
+}

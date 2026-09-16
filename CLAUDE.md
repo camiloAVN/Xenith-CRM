@@ -62,7 +62,10 @@ ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_SETUP_KEY   # /api/auth/register-admin
 RESEND_API_KEY                  # real; dominio xenith.com.co verificado
 RESEND_FROM_EMAIL               # vacío en Vercel → cae al default del código
 CRON_SECRET                     # generado; el cron no está programado
+BOT_API_TOKEN                   # token del bot de Telegram para /api/v1/bot/*
 ```
+
+**`BOT_API_TOKEN`:** el mismo valor vive en `.env`, en Vercel y en la credencial "Xenith Bot" de n8n. Sin él la ruta responde 401 siempre.
 
 **Remitente de correo:** `RESEND_FROM_EMAIL` está declarada pero **vacía** en Vercel, así que el código cae a `Xenith <contacto@xenith.com.co>` (el mismo default de `/api/cotizacion`). Funciona porque el dominio completo está verificado. Ojo: `app/api/contact/route.ts` tiene hardcodeado `onboarding@resend.dev`, que **solo entrega al dueño de la cuenta** — es deuda preexistente, no la copies.
 
@@ -256,7 +259,10 @@ GET             /api/v1/projects/[id]/contributions              # %, reparto, p
 GET             /api/v1/projects/[id]/contributions/metrics      # serie mensual, tendencia
 GET/POST        /api/v1/projects/[id]/contributions/adjustments  # POST solo dueño
 GET/POST        /api/v1/cron/close-voting                        # Bearer CRON_SECRET
+GET             /api/v1/bot/pendientes                           # Bearer BOT_API_TOKEN
 ```
+
+**`/api/v1/bot/pendientes`** es lo único que el bot de Telegram ve de esta app: solo lectura, sin sesión, con `Authorization: Bearer $BOT_API_TOKEN`. Devuelve por usuario activo sus tareas asignadas, las que le toca valorar, las que le toca aprobar y las que están en revisión; con `?since=ISO` agrega `novedades` (asignada, votar, aprobar, rechazada, aceptada) para los avisos cada 15 min. Con `?email=` responde solo por esa persona. `since` se recorta a 2 días para que un bot caído no dispare una avalancha. No liquida votaciones ni manda correos.
 
 **Las lecturas de tareas vienen decoradas** con `penalty` (calculado en el servidor) para que Kanban, lista, Gantt y el panel muestren el mismo número que se acredita al aceptar.
 
@@ -310,6 +316,95 @@ Cada handler:
 3. Valida el body con el schema Zod correspondiente → 400.
 4. Llama al servicio (en `/api/v1/`) o a Prisma directo (en `/api/` legada).
 5. `NextResponse.json(...)` con el código adecuado.
+
+## Agente de Telegram (reto anual del equipo)
+
+Bot **@Xenith26_bot** en un grupo de Telegram con Camilo, Nicolás y David ("Potro"). **No vive en esta app**: corre en n8n sobre Railway, con su propia base de datos. Esta app Next.js sigue en Vercel y no se ha tocado.
+
+### Qué hace
+
+Reto personal de un año (**17-sep-2026 → 17-sep-2027**). Cada uno tiene metas personales (Camilo 8, Nicolás 6, David 5) y hay 5 grupales. Quien incumpla paga `1.000.000 COP ÷ (sus metas personales + 5 grupales)` por cada meta incumplida; quien termine con más puntos se salva de pagar **una** meta.
+
+- **Evidencia:** foto/video en el grupo → el bot pregunta a qué meta es → cuánto suma → tarjeta con ✅/❌. Basta **un** voto de otro (el primero decide, nadie vota lo suyo): aprobada = 5 pts; sin votos en 48 h se auto-aprueba con 2 pts. Los puntos son solo motivación; lo que cuenta al final es la demostración física.
+- **Tipos de meta:** `ACUMULATIVA` (suma), `NIVEL` (último valor contra línea base; `direccion` SUBE/BAJA), `HITO` (sí/no con prueba final), `HABITO` (semanas con N días; entrenar: 45 de 52 = 85 %), `ABSTINENCIA` (pruebas en una ventana). La meta de dejar la marihuana se llama **"Maria"** en todo texto del bot — nunca escribir la palabra real.
+- **Grupales:** 30 dominadas, salsa y curso de comunicación = `GRUPAL_INDIVIDUAL` (cada uno la cumple); 200k seguidores de Instagram y 3 ventas en cada línea (oaxis, GA-IA, EDGE, Vector) = `GRUPAL_COLECTIVA`.
+- **Programado:** cada 15 min (auto-aprobación, borradores olvidados, recordatorios), 12/15/18/21 h (quién no ha subido evidencia hoy; miércoles 12 h pregunta por la meta más abandonada), domingo 19 h (resumen semanal). Los avisos del reto no salen antes del 17-sep-2026.
+- **Recordatorios personales:** por privado, insisten cada 3 h fuera de 22–7 h, botón ✅ Hecho. Se crean hablándole normal al bot por privado (lo resuelve el agente de IA) o se consultan con `/recordatorios`.
+
+### Chat privado: agente de IA + tareas de Xenith
+
+Por privado el bot es asistente personal de cada quien. Tres capacidades y nada más: recordatorios (crear/ver/cambiar/cancelar), sus tareas del CRM de Xenith y su avance del reto.
+
+- **Un solo llamado al modelo por mensaje.** `fn_agente_preparar` arma el body (system + memoria corta + 6 herramientas), n8n lo manda a `api.anthropic.com/v1/messages` y `fn_agente_responder` ejecuta la herramienta elegida y arma la respuesta **con plantillas SQL**. No hay bucle de agente ni segunda llamada: el modelo elige la acción, el texto lo pone la base.
+- **Modelo `claude-haiku-4-5`** ($1 / $5 por millón de tokens). ~US$0,002 por mensaje.
+- **Límites (todos en `config`, editables sin tocar código):** `ia_mensajes_dia` 25 por persona, `ia_tope_mes_usd` 3 sumando a los tres (al llegar la IA se apaga sola hasta el mes siguiente), `ia_max_tokens` 350, `ia_max_caracteres` 600, memoria de 30 min / 4 turnos (`chat_ia`, se purga a los 2 días). Cada llamada queda en `uso_ia` con tokens y costo; `/uso` lo muestra.
+- **Los comandos no cuestan:** `/tareas`, `/recordatorios`, `/uso`, `/metas`, `/avance`. Si se piden en el grupo, la respuesta sale por privado.
+- **Aislamiento:** el correo de Xenith sale de `participantes.xenith_email` (nunca del modelo), y `fn_xenith_usuario` solo entrega el bloque cuyo `email` coincide. Nadie ve las tareas de otro.
+- **Tope de gasto real:** el de la consola de Anthropic. El de `config` es el freno del bot.
+
+### Arquitectura
+
+```
+Telegram ──webhook──► n8n "Reto · Entrada Telegram" ──► select fn_procesar_update($1::jsonb)
+                      n8n "Reto · Programados"      ──► fn_tick() / fn_recordar_evidencias() / fn_resumen_semanal()
+                                                        fn_xenith_resumen() 7 am · fn_xenith_novedades() cada 15 min 7–21 h
+                                  │ devuelven [{metodo, params}]
+                                  ▼
+                      n8n "Reto · Ejecutar acciones" ──► Switch por `metodo`
+                                  ├── '__agente' ──► "Reto · Agente IA"     (Anthropic → fn_agente_responder)
+                                  ├── '__tareas' ──► "Reto · Tareas Xenith" (GET /api/v1/bot/pendientes → fn_xenith_tareas_de)
+                                  └── resto      ──► POST api.telegram.org/bot$TELEGRAM_BOT_TOKEN/<metodo>
+```
+
+Los dos sub-workflows terminan devolviendo sus acciones a "Ejecutar acciones", así que **todo mensaje sale por un solo sitio**. Un `metodo` que empiece por `__` nunca llega a Telegram.
+
+**Toda la lógica vive en funciones SQL** de la base `reto`; n8n solo transporta. Así se prueba con `begin; … rollback;` sin tocar Telegram. La conversación con el usuario no guarda estado aparte: el id de la evidencia viaja en el `callback_data` de los botones y como `#E<id>` en el texto de las preguntas del bot (la respuesta con una cifra se enlaza leyendo `reply_to_message.text`).
+
+Fuente versionada en `agente/`:
+- `agente/sql/01-schema.sql` — tablas, enums y vistas (`v_avance`, `v_puntos`, `v_penitencia`, `v_evidencias_hoy`).
+- `agente/sql/02-seed.sql` — config, participantes y metas. **Está en `.gitignore`** (metas personales); ya está cargado.
+- `agente/sql/03-logic.sql` — funciones del reto (evidencias, votos, programados). Idempotente: editar aquí y reaplicar.
+- `agente/sql/04-agente.sql` — agente de IA y tareas de Xenith: tablas `uso_ia` / `chat_ia`, límites, formato de fechas en español, `fn_agente_*`, `fn_xenith_*`. También idempotente.
+- `agente/n8n/*.json` — los 5 workflows con placeholders `__PG_ID__`, `__TG_ID__`, `__SUB_ID__`, `__AGENTE_ID__`, `__TAREAS_ID__`, `__XENITH_CRED_ID__`, `__ANTHROPIC_CRED_ID__`.
+
+### Infraestructura (Railway, proyecto `xenith-agente`)
+
+| Qué | Dato |
+|---|---|
+| Proyecto | id `bd9c4989-ef22-4208-be25-f6c280786660`, workspace "My Projects", plan Hobby |
+| n8n | https://n8n-production-2b81f.up.railway.app — imagen oficial `docker.n8n.io/n8nio/n8n:latest` (v2.38.7), BD interna en la base `railway` |
+| Postgres | Oficial (PG 18), **sin proxy público**: solo red privada. Bases `railway` (n8n) y `reto` (bot) |
+| Rol del bot | `reto_app`: solo DML sobre la base `reto`. Credencial n8n "Postgres Reto" `KLQoUaKtzVtI9hU4` |
+| Telegram | Credencial n8n "Telegram Reto" `NuTDWsAno013RCvO` (la usa el trigger). El envío usa `$env.TELEGRAM_BOT_TOKEN` (variable de Railway) porque la credencial de Telegram no sirve en el nodo HTTP; por eso `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` |
+| Workflows | Ejecutar acciones `NIPKvsHaslvT0sav` · Entrada Telegram `Z5R6HXcFOPqRerMo` · Programados `fZ1hUMmlzbkQmbvN` · Agente IA `aGzxzwuigVCxXOtJ` · Tareas Xenith `38RZPspXGkX97H5K` (los 5 activos) |
+| Credenciales HTTP | "Anthropic" `OAJycSISZNjnvTsr` (header `x-api-key`, solo api.anthropic.com) · "Xenith Bot" `Vys8WfXYcRO5zTd5` (header `Authorization: Bearer $BOT_API_TOKEN`, solo xenith.com.co). Se editan en la UI de n8n; la API key de Anthropic **nunca** se guarda en el repo |
+| API key de n8n | En `N8NTOKEN.txt` en la raíz (gitignored). Header `X-N8N-API-KEY` |
+
+### Cómo operar
+
+```bash
+# SQL en la base del reto (bloques railway-postgres / railway-n8n en ~/.ssh/config)
+ssh railway-postgres 'psql -U postgres -d reto'
+ssh railway-postgres 'psql -U postgres -d reto -q' < agente/sql/03-logic.sql   # reaplicar lógica
+
+# CLI de Railway: `railway add` no acepta --project; correr desde un dir enlazado
+# (railway link --project xenith-agente en una carpeta temporal, NO en este repo)
+```
+
+- **`railway login` no funciona con `!` desde Claude Code**: usar `railway login --browserless` en segundo plano y pasarle el enlace al usuario.
+- **API de n8n:** `POST /workflows/{id}/activate` exige `Content-Type: application/json` con body `{}`; los sub-workflows se publican **antes** que los que los llaman.
+- **Parámetros del nodo Postgres (v2.6):** usar `queryReplacement: "={{ [ $json ] }}"` — un arreglo evita que n8n parta el JSON por comas. Probado con comillas, `$$` y `;`.
+- **Borrar o desactivar workflows y relajar opciones de seguridad** lo bloqueó el clasificador de permisos: pedir al usuario que lo haga en la UI.
+- **Nunca dejar activo un workflow de prueba con Webhook** que llame a `fn_procesar_update`: permitiría falsificar updates de Telegram (registrarse como otro, votar).
+
+### Pendientes del agente
+
+- **Borrar los datos de prueba antes del 17-sep-2026** (hoy hay 2 evidencias y 1 voto de prueba): `delete from votos_evidencia; delete from evidencias;` (sin tocar participantes ni `grupo_chat_id`).
+- Nicolás aún no se ha registrado en el bot (`/soy`).
+- **Falta la API key de Anthropic** en la credencial "Anthropic" de n8n (hoy tiene un placeholder): sin ella el agente responde "no pude pensar ahora mismo". Los comandos siguen funcionando.
+- **Cada uno debe abrir el chat privado con @Xenith26_bot y darle Iniciar**, o los avisos y recordatorios por privado no le llegan (Telegram no deja escribir primero).
+- El cron de cierre de votaciones de Xenith (ver "Cron" arriba) puede dispararlo n8n con un Schedule + HTTP a `/api/v1/cron/close-voting` con `Bearer CRON_SECRET`. Aún no se hizo.
+- Cierre del año: veredicto por meta (`veredictos_finales`) y cálculo final de la penitencia con la exoneración por puntos.
 
 ## Pendientes conocidos
 

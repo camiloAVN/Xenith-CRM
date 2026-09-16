@@ -1,0 +1,92 @@
+{
+  "name": "Reto · Ejecutar acciones",
+  "settings": { "executionOrder": "v1", "timezone": "America/Bogota", "callerPolicy": "workflowsFromSameOwner" },
+  "nodes": [
+    {
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Recibe acciones",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "parameters": { "inputSource": "passthrough" }
+    },
+    {
+      "id": "a1b2c3d4-0001-4000-8000-000000000002",
+      "name": "Una acción por item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Cada item trae { acts: [{metodo, params}] } desde una función de la base del reto.\n// Los métodos que empiezan por '__' no son de Telegram: los reparte el Switch.\nconst salida = [];\nfor (const item of $input.all()) {\n  for (const a of item.json.acts || []) salida.push({ json: a });\n}\nreturn salida;"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0001-4000-8000-000000000004",
+      "name": "¿A dónde va?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [480, 0],
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 3,
+        "output": "={{ $json.metodo === '__agente' ? 0 : ($json.metodo === '__tareas' ? 1 : 2) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "a1b2c3d4-0001-4000-8000-000000000005",
+      "name": "Agente IA",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [760, -200],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "value": "__AGENTE_ID__", "mode": "id" },
+        "mode": "once",
+        "options": { "waitForSubWorkflow": false }
+      }
+    },
+    {
+      "id": "a1b2c3d4-0001-4000-8000-000000000006",
+      "name": "Tareas Xenith",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [760, 0],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "value": "__TAREAS_ID__", "mode": "id" },
+        "mode": "once",
+        "options": { "waitForSubWorkflow": false }
+      }
+    },
+    {
+      "id": "a1b2c3d4-0001-4000-8000-000000000003",
+      "name": "Telegram API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [760, 200],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/{{ $json.metodo }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.params) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Recibe acciones": { "main": [[{ "node": "Una acción por item", "type": "main", "index": 0 }]] },
+    "Una acción por item": { "main": [[{ "node": "¿A dónde va?", "type": "main", "index": 0 }]] },
+    "¿A dónde va?": {
+      "main": [
+        [{ "node": "Agente IA", "type": "main", "index": 0 }],
+        [{ "node": "Tareas Xenith", "type": "main", "index": 0 }],
+        [{ "node": "Telegram API", "type": "main", "index": 0 }]
+      ]
+    }
+  }
+}

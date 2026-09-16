@@ -1,0 +1,63 @@
+{
+  "name": "Reto · Tareas Xenith",
+  "settings": { "executionOrder": "v1", "timezone": "America/Bogota", "callerPolicy": "workflowsFromSameOwner" },
+  "nodes": [
+    {
+      "id": "d1b2c3d4-0004-4000-8000-000000000001",
+      "name": "Recibe",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "parameters": { "inputSource": "passthrough" }
+    },
+    {
+      "id": "d1b2c3d4-0004-4000-8000-000000000002",
+      "name": "Consultar Xenith",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 0],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "https://xenith.com.co/api/v1/bot/pendientes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": { "parameters": [{ "name": "email", "value": "={{ $json.params.email }}" }] },
+        "options": { "timeout": 30000 }
+      },
+      "credentials": { "httpHeaderAuth": { "id": "__XENITH_CRED_ID__", "name": "Xenith Bot" } }
+    },
+    {
+      "id": "d1b2c3d4-0004-4000-8000-000000000003",
+      "name": "Formatear",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [480, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "select fn_xenith_tareas_de($1::jsonb, $2::bigint) as acts",
+        "options": { "queryReplacement": "={{ [ $json, $('Recibe').item.json.params.chat_id ] }}" }
+      },
+      "credentials": { "postgres": { "id": "__PG_ID__", "name": "Postgres Reto" } }
+    },
+    {
+      "id": "d1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Ejecutar acciones",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [720, 0],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "value": "__SUB_ID__", "mode": "id" },
+        "mode": "once",
+        "options": { "waitForSubWorkflow": true }
+      }
+    }
+  ],
+  "connections": {
+    "Recibe": { "main": [[{ "node": "Consultar Xenith", "type": "main", "index": 0 }]] },
+    "Consultar Xenith": { "main": [[{ "node": "Formatear", "type": "main", "index": 0 }]] },
+    "Formatear": { "main": [[{ "node": "Ejecutar acciones", "type": "main", "index": 0 }]] }
+  }
+}
