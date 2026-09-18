@@ -1,93 +1,41 @@
-import type { ContributionSettings } from '@/lib/services/contribution-settings.service'
-
 /**
- * Descuentos sobre el valor de una tarea.
+ * Vencimiento: qué pasa cuando una tarea se pasa de su fecha límite.
  *
- * Desde la Fase 2 (Scrum) la referencia es el SPRINT, no la fecha límite: el
- * compromiso del equipo es terminar dentro de la caja de tiempo, así que lo
- * que descuenta es
+ * La regla es una sola y es dura: **pasarse de la fecha cuesta el valor
+ * completo de la tarea**. Si la tarea vale 3 y no se entregó a tiempo, se
+ * escribe un asiento de −3 en el ledger, automáticamente, sin esperar a que
+ * nadie revise nada. El saldo de una persona puede quedar negativo, y con
+ * saldo negativo no se lleva nada del reparto (queda en cero, nunca debe).
  *
- *   - **arrastre**: cada vez que la tarea pasa sin terminar a otro sprint;
- *   - **retrabajo**: cada rechazo de los jefes (`completionRound - 1`).
+ * Si después entrega y los jefes la aceptan, se le acredita el valor VIGENTE
+ * de la tarea. Por eso la revaluación importa: si el equipo vuelve a votar y
+ * la tarea pasa de 3 a 5, al aceptarla suma 5 contra el −3 que ya se cobró.
  *
- * La `dueDate` sigue existiendo y se muestra en rojo cuando vence, pero ya no
- * cuesta puntos: penalizar por día era gestión por fechas, no Scrum. Las
- * columnas `lateAccruedDays` / `lateClockStartedAt` quedan en la base para
- * poder leer el histórico; nada nuevo las escribe.
+ * Dos cosas frenan el cobro:
+ *   - **Entregar** (`SUBMITTED`): el reloj se detiene al marcar terminada; la
+ *     demora de los jefes en revisar no le cuesta puntos a quien ya entregó.
+ *   - **Pedir revaluación**: mientras esté pedida, la tarea queda en pausa y no
+ *     se cobra nada aunque la fecha pase.
  *
- * El piso (50 % por defecto) sigue siendo el mismo: por muchos tropiezos que
- * tenga, una tarea nunca vale menos de la mitad de lo que el equipo estimó.
+ * Los descuentos por arrastre de sprint y por rechazo se retiraron: el equipo
+ * decidió una sola regla, clara y fuerte, en vez de tres porcentajes.
  */
-
-export interface TaskDiscountInput {
-  /** Rechazos de los jefes: `completionRound - 1`. */
-  rejections: number
-  /** Veces que la tarea se arrastró a otro sprint. */
-  carryovers: number
-}
-
-export interface DiscountResult {
-  /** Puntos descontados por retrabajo, antes del piso. */
-  reworkPenalty: number
-  /** Puntos descontados por arrastre, antes del piso. */
-  carryoverPenalty: number
-  /** Descuento total ya topado por el piso. */
-  penalty: number
-  /** Valor acreditable: valor estimado − descuento. */
-  effectivePoints: number
-  /** true si el piso recortó el descuento. */
-  floored: boolean
-}
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
-/**
- * Descuento sobre un valor ya fijado.
- *
- * Los dos descuentos son proporcionales al valor de la tarea: 25 % de un 13
- * pesa más que 25 % de un 2, que es justamente lo que se quiere —perder el
- * sprint en algo grande cuesta más—. Se suman (no se componen) y el piso los
- * recorta al final.
- */
-export function computeDiscounts(
-  pointsValue: number,
-  input: TaskDiscountInput,
-  settings: ContributionSettings
-): DiscountResult {
-  const rejections = Math.max(0, Math.floor(input.rejections))
-  const carryovers = Math.max(0, Math.floor(input.carryovers))
-
-  const reworkPenalty = pointsValue * settings.reworkPenalty * rejections
-  const carryoverPenalty = pointsValue * settings.carryoverPenalty * carryovers
-
-  const raw = reworkPenalty + carryoverPenalty
-  const maxPenalty = pointsValue - pointsValue * settings.penaltyFloorRatio
-  const penalty = Math.min(raw, maxPenalty)
-
-  return {
-    reworkPenalty: round2(reworkPenalty),
-    carryoverPenalty: round2(carryoverPenalty),
-    // Redondeo a 2 decimales: la columna es Decimal(5,2) y evita arrastrar
-    // ruido de coma flotante al ledger, que se suma para el %.
-    penalty: round2(penalty),
-    effectivePoints: round2(pointsValue - penalty),
-    floored: raw > maxPenalty,
-  }
-}
-
-/** Vista en vivo de los descuentos de una tarea, tal como la consume la UI. */
+/** Vista del vencimiento de una tarea, tal como la consumen las 4 vistas. */
 export interface TaskPenaltyPreview {
   pointsValue: number | null
-  /** Valor acreditable hoy; en una tarea aceptada, el que ya se acreditó. */
+  /** Lo que se acredita si se acepta hoy; en una aceptada, lo ya acreditado. */
   effectivePoints: number | null
-  penalty: number
-  reworkPenalty: number
-  carryoverPenalty: number
-  rejections: number
-  carryovers: number
-  floored: boolean
-  /** Informativo: la fecha límite ya pasó. No descuenta nada. */
+  /** La fecha ya pasó y la tarea sigue sin entregar (y sin revaluación). */
   isOverdue: boolean
+  /** Ya se escribió el asiento negativo: no se vuelve a cobrar. */
+  overdueCharged: boolean
+  /** Está en revaluación: el reloj está en pausa. */
+  inRevaluation: boolean
+  /** Horas que faltan para la fecha límite; negativo si ya pasó. */
+  hoursLeft: number | null
 }
 
 /** Campos mínimos que necesita el preview. */
@@ -96,71 +44,64 @@ export interface PenaltyTaskFields {
   pointsValue: unknown | null
   effectivePoints: unknown | null
   completionStatus: string
-  completionRound: number
-  carriedOverCount: number
+  overdueChargedAt: Date | null
+  revaluationRequestedAt: Date | null
 }
 
 /**
- * Descuentos vigentes de una tarea.
+ * ¿Se le debe cobrar el vencimiento a esta tarea ahora mismo?
  *
- * En una tarea ACEPTADA no se recalcula nada: el valor efectivo quedó
- * congelado al aceptarla y es el que está en el ledger. Recalcularlo la haría
- * "seguir cambiando" después de cobrada.
+ * Exige valor fijado: sin votación cerrada no hay cuánto cobrar, así que el
+ * cobro espera a que cierre (el barrido la vuelve a mirar después).
  */
+export function shouldChargeOverdue(
+  task: PenaltyTaskFields & { valuationStatus?: string; assignedTo?: string | null },
+  now: Date = new Date()
+): boolean {
+  if (task.overdueChargedAt) return false
+  if (task.revaluationRequestedAt) return false
+  if (task.completionStatus !== 'PENDING') return false
+  if (task.assignedTo === null) return false
+  if (task.valuationStatus !== undefined && task.valuationStatus !== 'VALUED') return false
+  if (task.pointsValue == null) return false
+  return task.dueDate != null && task.dueDate < now
+}
+
 export function buildPenaltyPreview(
   task: PenaltyTaskFields,
-  settings: ContributionSettings,
+  _settings?: unknown,
   now: Date = new Date()
 ): TaskPenaltyPreview {
   const pointsValue = task.pointsValue != null ? Number(task.pointsValue) : null
-  const rejections = Math.max(0, (task.completionRound ?? 1) - 1)
-  const carryovers = task.carriedOverCount ?? 0
-  const isOverdue = task.dueDate != null && task.dueDate < now && task.completionStatus !== 'ACCEPTED'
+  const inRevaluation =
+    task.revaluationRequestedAt != null && task.completionStatus !== 'ACCEPTED'
+
+  const hoursLeft = task.dueDate
+    ? round2((task.dueDate.getTime() - now.getTime()) / 3_600_000)
+    : null
 
   if (task.completionStatus === 'ACCEPTED') {
-    const effectivePoints = task.effectivePoints != null ? Number(task.effectivePoints) : null
     return {
       pointsValue,
-      effectivePoints,
-      penalty:
-        pointsValue != null && effectivePoints != null
-          ? round2(pointsValue - effectivePoints)
-          : 0,
-      reworkPenalty: 0,
-      carryoverPenalty: 0,
-      rejections,
-      carryovers,
-      floored: false,
+      effectivePoints: task.effectivePoints != null ? Number(task.effectivePoints) : null,
       isOverdue: false,
+      overdueCharged: task.overdueChargedAt != null,
+      inRevaluation: false,
+      hoursLeft,
     }
   }
 
-  // Sin valor fijado todavía no hay nada que descontar, pero los tropiezos ya
-  // se cuentan: el equipo debe verlos antes de que cierre la votación.
-  if (pointsValue == null) {
-    return {
-      pointsValue: null,
-      effectivePoints: null,
-      penalty: 0,
-      reworkPenalty: 0,
-      carryoverPenalty: 0,
-      rejections,
-      carryovers,
-      floored: false,
-      isOverdue,
-    }
-  }
-
-  const result = computeDiscounts(pointsValue, { rejections, carryovers }, settings)
   return {
     pointsValue,
-    effectivePoints: result.effectivePoints,
-    penalty: result.penalty,
-    reworkPenalty: result.reworkPenalty,
-    carryoverPenalty: result.carryoverPenalty,
-    rejections,
-    carryovers,
-    floored: result.floored,
-    isOverdue,
+    // Sin descuentos: lo que se acredita al aceptar es el valor vigente.
+    effectivePoints: pointsValue,
+    isOverdue:
+      !inRevaluation &&
+      task.completionStatus === 'PENDING' &&
+      task.dueDate != null &&
+      task.dueDate < now,
+    overdueCharged: task.overdueChargedAt != null,
+    inRevaluation,
+    hoursLeft,
   }
 }

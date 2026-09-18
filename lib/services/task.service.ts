@@ -73,9 +73,13 @@ async function settleExpiredVotings(projectId: string) {
   try {
     const { taskValuationService } = await import('@/lib/services/task-valuation.service')
     await taskValuationService.settleExpired(projectId)
+    // Y de paso se cobran las tareas que se pasaron de la fecha: sin cron, es
+    // aqui donde el vencimiento se vuelve real.
+    const { taskOverdueService } = await import('@/lib/services/task-overdue.service')
+    await taskOverdueService.chargeOverdue(projectId)
   } catch (error) {
     // Nunca debe tumbar la carga del tablero.
-    console.error('Error al cerrar votaciones vencidas:', error)
+    console.error('Error al cerrar votaciones vencidas o cobrar vencimientos:', error)
   }
 }
 

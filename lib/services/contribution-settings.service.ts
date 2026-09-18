@@ -11,19 +11,12 @@ export interface ContributionSettings {
   minVotes: number
   minPoints: number
   maxPoints: number
-  /** Penalización por día de la etapa anterior. Solo para leer el histórico. */
-  penaltyPerDay: number
-  penaltyFloorRatio: number
   disagreementDelta: number
   votingWindowHours: number
   /** Duración por defecto de un sprint nuevo. */
   sprintLengthDays: number
-  /** Tope de puntos por persona con el que nace cada sprint. */
+  /** Tope de puntos por persona con el que nace cada sprint (21 = tope de la escala). */
   defaultCapacityPoints: number
-  /** Descuento por cada arrastre a otro sprint. */
-  carryoverPenalty: number
-  /** Descuento por cada rechazo de los jefes. */
-  reworkPenalty: number
   /** Capa del fundador sobre el neto del proyecto. */
   founderRatio: number
   /** Capa que se reparte por puntos. La empresa se queda con el resto. */
@@ -46,14 +39,10 @@ export const DEFAULT_SETTINGS: ContributionSettings = {
   minVotes: 2,
   minPoints: 1,
   maxPoints: 21,
-  penaltyPerDay: 0.2,
-  penaltyFloorRatio: 0.5,
   disagreementDelta: 2,
   votingWindowHours: 24,
   sprintLengthDays: 14,
-  defaultCapacityPoints: 13,
-  carryoverPenalty: 0.2,
-  reworkPenalty: 0.25,
+  defaultCapacityPoints: 21,
   founderRatio: 0.15,
   poolRatio: 0.6,
   maxIndividualShare: 0.45,
@@ -63,14 +52,10 @@ type SettingsRow = {
   minVotes: number
   minPoints: number
   maxPoints: number
-  penaltyPerDay: unknown
-  penaltyFloorRatio: unknown
   disagreementDelta: number
   votingWindowHours: number
   sprintLengthDays: number
   defaultCapacityPoints: number
-  carryoverPenalty: unknown
-  reworkPenalty: unknown
   founderRatio: unknown
   poolRatio: unknown
   maxIndividualShare: unknown
@@ -81,14 +66,10 @@ function toSettings(row: SettingsRow): ContributionSettings {
     minVotes: row.minVotes,
     minPoints: row.minPoints,
     maxPoints: row.maxPoints,
-    penaltyPerDay: Number(row.penaltyPerDay),
-    penaltyFloorRatio: Number(row.penaltyFloorRatio),
     disagreementDelta: row.disagreementDelta,
     votingWindowHours: row.votingWindowHours,
     sprintLengthDays: row.sprintLengthDays,
     defaultCapacityPoints: row.defaultCapacityPoints,
-    carryoverPenalty: Number(row.carryoverPenalty),
-    reworkPenalty: Number(row.reworkPenalty),
     founderRatio: Number(row.founderRatio),
     poolRatio: Number(row.poolRatio),
     maxIndividualShare: Number(row.maxIndividualShare),

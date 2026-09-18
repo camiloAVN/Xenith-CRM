@@ -192,7 +192,13 @@ export const contributionService = {
       entryCount: row._count._all,
     }))
 
-    const totalPoints = round2(rows.reduce((acc, r) => acc + r.points, 0))
+    // Solo los saldos POSITIVOS reparten. Un saldo negativo (tareas vencidas)
+    // no resta del total ni arrastra a los demás: esa persona simplemente no
+    // cobra, y los porcentajes de los otros se calculan entre ellos. Sumar los
+    // negativos daría totales absurdos —o negativos— y porcentajes sin sentido.
+    const totalPoints = round2(
+      rows.reduce((acc, r) => acc + Math.max(0, r.points), 0)
+    )
 
     // El dinero se corta en capas ANTES de mirar los puntos, y el pozo lleva
     // encima el tope individual.
@@ -211,8 +217,12 @@ export const contributionService = {
 
     const members: MemberContribution[] = rows
       .map((row) => {
-        // Con total 0 no hay reparto posible; evita dividir por cero.
-        const percentage = totalPoints > 0 ? round2((row.points / totalPoints) * 100) : 0
+        // Con total 0 no hay reparto posible; evita dividir por cero. Un saldo
+        // negativo o en cero no participa: queda en 0 %, nunca en deuda.
+        const percentage =
+          totalPoints > 0 && row.points > 0
+            ? round2((row.points / totalPoints) * 100)
+            : 0
         const cut = shareByUser.get(row.userId)
         return {
           userId: row.userId,

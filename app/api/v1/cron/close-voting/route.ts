@@ -39,10 +39,17 @@ async function handle(request: NextRequest) {
 
   try {
     const settled = await taskValuationService.settleExpired()
+    // El mismo barrido cobra las tareas que se pasaron de la fecha: primero se
+    // cierran las votaciones, porque sin valor fijado no hay cuanto cobrar.
+    const { taskOverdueService } = await import('@/lib/services/task-overdue.service')
+    const charged = await taskOverdueService.chargeOverdue()
+
     return NextResponse.json({
       ok: true,
       settled: settled.length,
       taskIds: settled,
+      overdueCharged: charged.length,
+      overdueTaskIds: charged,
       ranAt: new Date().toISOString(),
     })
   } catch (error) {

@@ -361,10 +361,18 @@ export function TaskDetailPanel({
                 onSettled={loadFullTask}
               />
 
-              {/* Penalización por retraso — solo aparece si hay retraso real. */}
+              {/* Fecha límite: lo que cuesta pasarse y la salida a tiempo
+                  (pedir revaluación). Pasarse cuesta el valor completo. */}
               <TaskPenalty
                 penalty={ft.penalty}
+                projectId={projectId}
+                taskId={ft.id}
+                canRequest={ft.assignedTo === currentUserId && ft.completionStatus !== 'ACCEPTED'}
+                canResolve={canManageTasks}
                 isAccepted={ft.completionStatus === 'ACCEPTED'}
+                // Recargar: la revaluación puede cambiar la fecha, reabrir la
+                // votación y mover el estado de la tarjeta.
+                onChanged={loadFullTask}
               />
 
               {/* Cumplimiento — el asignado marca terminada; el crédito de

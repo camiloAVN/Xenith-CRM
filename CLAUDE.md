@@ -198,18 +198,32 @@ Se reabre aceptada   → IN_PROGRESS · asiento negativo TASK_REVERTED
 - Un voto por persona, corregible mientras la ventana siga abierta. **No hay reapertura.**
 - Los votos individuales se revelan **al cerrar**; durante la votación solo se ve el conteo, para no anclar a quien falta.
 
-### Sprints y descuentos
-
-Desde la Fase 2 la referencia es el **sprint**, no la fecha límite.
+### Sprints
 
 - Sprint de **2 semanas**; solo uno `ACTIVE` por proyecto. `sprintId` nulo = **backlog**.
-- **Capacidad por persona y sprint** (13 por defecto). `sprintService.assertCanCommit()` bloquea asignar por encima del tope — es el freno central contra acumular tareas para ganar más.
-- Una tarea valorada en **21 (épica) no entra a un sprint**: hay que partirla. En la Fase 1 era un aviso; ahora bloquea.
-- Al **cerrar** un sprint, lo no aceptado se arrastra al sprint destino (o al backlog) con `carriedOverCount + 1`.
-- **Descuentos** sobre el valor estimado, proporcionales: **25 % por cada rechazo** (`completionRound - 1`) y **20 % por cada arrastre**. Se suman y el **piso del 50 %** los recorta. Ejemplo: 5 pts con 1 rechazo y 1 arrastre → 2,75.
-- **Al aceptar se congela** en `effectivePoints`. `buildPenaltyPreview()` no recalcula una tarea `ACCEPTED`: si lo hiciera, una tarea cobrada en marzo mostraría otro valor en diciembre.
-- **`dueDate` ya no penaliza**: es informativa (se pinta roja al vencer) y puede quedar vacía. Las columnas `lateAccruedDays` / `lateClockStartedAt` siguen en la base para leer el histórico; **nada nuevo las escribe**.
+- **Capacidad por persona y sprint: 21** (el tope de la escala — nadie se compromete a más de una tarea máxima). `sprintService.assertCanCommit()` bloquea asignar por encima del tope: es el freno contra acumular tareas para ganar más.
+- Una tarea valorada en **21 (épica) no entra a un sprint**: hay que partirla.
+- Al **cerrar** un sprint, lo no aceptado se arrastra al sprint destino (o al backlog) con `carriedOverCount + 1`. **El arrastre ya no descuenta**: quedó solo como dato.
 - **La tarea puede nacer sin asignado** (backlog estimado): el equipo la valora y se reparte en la planeación. `CreateTaskSchema` ya no exige `assignedTo` ni `dueDate`.
+
+### Fecha límite: pasarse cuesta el valor completo
+
+La regla es **una sola y es dura** (decisión del equipo, 18-sep-2026): pasarse de `dueDate` sin entregar cuesta **el valor entero de la tarea**.
+
+- Al vencer se escribe **un** asiento `TASK_OVERDUE` de `−pointsValue` y la tarea queda marcada con `overdueChargedAt` para no cobrarlo dos veces. `taskOverdueService.chargeOverdue()` corre en el **barrido perezoso** (al abrir el tablero) y en el cron.
+- **El saldo puede quedar negativo.** Con saldo negativo la persona no cobra nada del reparto: queda en 0, nunca en deuda (`splitPool` solo mira saldos positivos, y `getProjectContributions` suma solo los positivos para el total — si sumara los negativos, los porcentajes de todos saldrían mal).
+- **Entregar detiene el reloj:** en `SUBMITTED` no se cobra; la demora de los jefes en revisar no le cuesta puntos a quien ya entregó.
+- Si después se entrega y se acepta, se acredita el **valor vigente** (sin descuentos). Vencerse y luego entregar con el mismo valor deja neto **0**; si la revaluación subió el valor, queda a favor.
+- **Los descuentos por arrastre (20 %) y por rechazo (25 %) se retiraron**, junto con `penaltyPerDay` y el piso del 50 %: el equipo prefirió una sola regla fuerte a tres porcentajes. Las columnas `lateAccruedDays` / `lateClockStartedAt` siguen en `Task` solo para leer el histórico.
+
+### Revaluación (la salida honesta)
+
+El asignado puede avisar **antes** de que el reloj le cobre: botón en el panel de la tarea.
+
+- `revaluationRequestedAt` **pausa el vencimiento**: mientras esté pedida no se cobra aunque la fecha pase.
+- Sale correo a los jefes (`revaluationRequested`).
+- Un jefe la resuelve con **fecha nueva** y, si el equipo lo ve distinto, **reabre la votación** (`reopenVoting`): se borran los votos viejos y se abre una ventana nueva. Fecha nueva = `overdueChargedAt` vuelve a null, así que la tarea puede volver a vencer con su valor nuevo.
+- Es el único camino por el que una votación se reabre.
 
 ### Ledger, capas y reparto
 
@@ -253,20 +267,21 @@ lib/services/task-lifecycle.ts                Máquina de estados: guardas puras
 lib/services/point-scale.ts                   Escala Fibonacci, anclas, snapToScale, pasos de desacuerdo
 lib/services/task-valuation.service.ts        Mediana, quórum, castVote, settleTask (idempotente)
 lib/services/task-completion.service.ts       Aprobación/rechazo, aceptación, ledger, reopen
-lib/services/task-penalty.ts                  Descuentos por rechazo y arrastre, buildPenaltyPreview
+lib/services/task-penalty.ts                  Vencimiento: shouldChargeOverdue, buildPenaltyPreview
+lib/services/task-overdue.service.ts          Cobro del vencimiento y revaluación (pedir/resolver)
 lib/services/sprint.service.ts                Sprints: crear, arrancar, cerrar con arrastre, capacidad, velocidad
 lib/services/profit-split.ts                  Capas del neto y tope individual (cálculo puro)
 lib/services/payout.service.ts                Liquidaciones: preview, create (congela), list
 lib/services/contribution.service.ts          %, reparto en vivo, ajustes manuales
 lib/services/contribution-metrics.service.ts  Serie mensual, mejor mes, tendencia
 lib/services/contribution-settings.service.ts Parámetros: override de proyecto → global → defaults
-lib/services/notification.service.ts          Los 5 correos (Resend)
+lib/services/notification.service.ts          Los 8 correos (Resend)
 lib/email/shell.ts                            Marco HTML compartido
 lib/email/task-templates.ts                   Plantillas del sistema de puntos
 lib/utils/chart-palette.ts                    Paleta categórica VALIDADA para daltonismo
 components/projects/TaskVoting.tsx            Botonera Fibonacci con anclas, quórum, cuenta regresiva
 components/projects/TaskApproval.tsx          Aceptar/rechazar, quién firmó, reabrir
-components/projects/TaskPenalty.tsx           Franja de descuentos (solo si hubo rechazo o arrastre)
+components/projects/TaskPenalty.tsx           Fecha límite, cobro del vencimiento y botón de revaluación
 components/projects/SprintBar.tsx             Sprint activo, capacidad por persona, arrancar/cerrar, alcance del tablero
 components/projects/TaskPointsBadge.tsx       Chip de puntos, compartido por las 3 vistas
 components/projects/ContributionShare.tsx     Panel de reparto en la página del proyecto
@@ -309,6 +324,7 @@ POST            /api/v1/projects/[id]/tasks/[taskId]/submit      # el asignado m
 GET/POST        /api/v1/projects/[id]/tasks/[taskId]/votes       # estado / votar
 GET/POST        /api/v1/projects/[id]/tasks/[taskId]/approvals   # estado / aprobar-rechazar
 POST            /api/v1/projects/[id]/tasks/[taskId]/reopen      # revierte los puntos
+POST            /api/v1/projects/[id]/tasks/[taskId]/revaluation  # pedir (asignado) o resolver (jefe)
 GET/POST        /api/v1/projects/[id]/tasks/[taskId]/comments
 PUT/DELETE      /api/v1/projects/[id]/tasks/[taskId]/comments/[commentId]   # owner-only
 GET             /api/v1/projects/[id]/tasks/[taskId]/history
@@ -322,7 +338,7 @@ GET/POST        /api/v1/projects/[id]/payouts                    # liquidaciones
 GET             /api/v1/projects/[id]/contributions              # %, reparto, pendientes
 GET             /api/v1/projects/[id]/contributions/metrics      # serie mensual, tendencia
 GET/POST        /api/v1/projects/[id]/contributions/adjustments  # POST solo dueño
-GET/POST        /api/v1/cron/close-voting                        # Bearer CRON_SECRET
+GET/POST        /api/v1/cron/close-voting                        # Bearer CRON_SECRET · cierra votaciones Y cobra vencimientos
 GET             /api/v1/bot/pendientes                           # Bearer BOT_API_TOKEN
 ```
 

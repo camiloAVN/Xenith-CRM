@@ -1,12 +1,11 @@
 import { prisma } from '@/lib/db/prisma'
 import { getProjectPermissions } from '@/lib/auth/permissions'
-import { contributionSettingsService } from '@/lib/services/contribution-settings.service'
 import {
   getApprovalRequirement,
   getRequiredApproverIds,
   canReviewCompletion,
 } from '@/lib/services/task-lifecycle'
-import { computeDiscounts } from '@/lib/services/task-penalty'
+
 import { TaskPermissionError } from '@/lib/services/task.service'
 import { notificationService } from '@/lib/services/notification.service'
 
@@ -57,6 +56,8 @@ const taskSelect = {
   completionStatus: true,
   completionRound: true,
   carriedOverCount: true,
+  overdueChargedAt: true,
+  revaluationRequestedAt: true,
   status: true,
   pointsValue: true,
   effectivePoints: true,
@@ -178,23 +179,14 @@ export const taskCompletionService = {
         : requirement.userIds.some((id) => approvedBy.has(id))
     if (!signed) return false
 
-    const settings = await contributionSettingsService.resolve(task.projectId)
     const now = new Date()
-    const rejections = Math.max(0, task.completionRound - 1)
-    const carryovers = task.carriedOverCount ?? 0
-    const penalty = computeDiscounts(
-      Number(task.pointsValue),
-      { rejections, carryovers },
-      settings
-    )
-    const motivos = [
-      rejections > 0 ? `${rejections} rechazo(s)` : null,
-      carryovers > 0 ? `${carryovers} arrastre(s) de sprint` : null,
-    ].filter(Boolean)
-    const note =
-      penalty.penalty > 0
-        ? `Valor ${Number(task.pointsValue)} menos ${penalty.penalty} por ${motivos.join(' y ')}`
-        : null
+    // Sin descuentos: se acredita el valor VIGENTE de la tarea. Si se paso de
+    // la fecha, el −valor ya se cobro aparte (asiento TASK_OVERDUE) y ahi se
+    // queda; una revaluacion que suba el valor deja saldo a favor.
+    const credited = Number(task.pointsValue)
+    const note = task.overdueChargedAt
+      ? `Aceptada despues de vencerse (el −${credited} del vencimiento sigue en el ledger)`
+      : null
 
     await prisma.$transaction(async (tx) => {
       const written = await tx.task.updateMany({
@@ -202,7 +194,7 @@ export const taskCompletionService = {
         data: {
           completionStatus: 'ACCEPTED',
           acceptedAt: now,
-          effectivePoints: penalty.effectivePoints,
+          effectivePoints: credited,
           // Aceptada = hecha. La tarjeta cae sola en la columna final.
           status: 'DONE',
           completed: true,
@@ -217,7 +209,7 @@ export const taskCompletionService = {
           userId: task.assignedTo as string,
           taskId,
           type: 'TASK_ACCEPTED',
-          points: penalty.effectivePoints,
+          points: credited,
           note,
           createdById: actorId ?? null,
         },

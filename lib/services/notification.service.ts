@@ -1,6 +1,6 @@
 import { Resend } from 'resend'
 import { prisma } from '@/lib/db/prisma'
-import { getProjectMemberIds } from '@/lib/auth/permissions'
+import { getProjectMemberIds, getProjectLeadIds } from '@/lib/auth/permissions'
 import { getEligibleVoterIds, getRequiredApproverIds } from '@/lib/services/task-lifecycle'
 import { contributionSettingsService } from '@/lib/services/contribution-settings.service'
 import { allowedScale } from '@/lib/services/point-scale'
@@ -10,6 +10,9 @@ import {
   completionSubmittedEmail,
   completionAcceptedEmail,
   completionRejectedEmail,
+  revaluationRequestedEmail,
+  revaluationResolvedEmail,
+  taskOverdueEmail,
   type TaskEmailContext,
 } from '@/lib/email/task-templates'
 
@@ -242,4 +245,86 @@ export const notificationService = {
       console.error('[notificaciones] completionRejected:', error)
     }
   },
+
+  /**
+   * Revaluación pedida → a los jefes del proyecto.
+   *
+   * Es el correo que dispara el botón: alguien avisa a tiempo de que no llega,
+   * y la tarea queda en pausa hasta que los jefes decidan.
+   */
+  async revaluationRequested(
+    taskId: string,
+    requesterId: string,
+    reason?: string | null
+  ): Promise<void> {
+    try {
+      const loaded = await loadContext(taskId)
+      if (!loaded) return
+      const { task, ctx } = loaded
+
+      const leadIds = await getProjectLeadIds(task.projectId)
+      const to = await resolveRecipients(leadIds.filter((id: string) => id !== requesterId))
+      if (to.length === 0) return
+
+      const [requester] = await resolveRecipients([requesterId])
+
+      await send(
+        to,
+        `Revaluación pedida: ${task.title}`,
+        revaluationRequestedEmail({
+          ...ctx,
+          requesterName: requester?.name || requester?.email || 'El asignado',
+          reason,
+          pointsValue: task.pointsValue != null ? Number(task.pointsValue) : null,
+        })
+      )
+    } catch (error) {
+      console.error('[notificaciones] revaluationRequested:', error)
+    }
+  },
+
+  /** Revaluación resuelta → al asignado, que es quien la pidió. */
+  async revaluationResolved(
+    taskId: string,
+    reviewerId: string,
+    options: { reopenedVoting: boolean }
+  ): Promise<void> {
+    try {
+      const loaded = await loadContext(taskId)
+      if (!loaded) return
+      const { task, ctx } = loaded
+      if (!task.assignedTo) return
+
+      const [reviewer] = await resolveRecipients([reviewerId])
+      const to = await resolveRecipients([task.assignedTo])
+
+      await send(
+        to,
+        `Revaluación resuelta: ${task.title}`,
+        revaluationResolvedEmail({
+          ...ctx,
+          reviewerName: reviewer?.name || reviewer?.email || 'Un jefe del proyecto',
+          reopenedVoting: options.reopenedVoting,
+        })
+      )
+    } catch (error) {
+      console.error('[notificaciones] revaluationResolved:', error)
+    }
+  },
+
+  /** Tarea vencida → al asignado, con lo que se le descontó. */
+  async taskOverdue(taskId: string, charged: number): Promise<void> {
+    try {
+      const loaded = await loadContext(taskId)
+      if (!loaded) return
+      const { task, ctx } = loaded
+      if (!task.assignedTo) return
+
+      const to = await resolveRecipients([task.assignedTo])
+      await send(to, `Vencida: ${task.title}`, taskOverdueEmail({ ...ctx, charged }))
+    } catch (error) {
+      console.error('[notificaciones] taskOverdue:', error)
+    }
+  },
 }
+

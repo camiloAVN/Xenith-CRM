@@ -190,10 +190,19 @@ model Task {
   acceptedAt       DateTime?
   lastRejectedAt   DateTime?
 
-  // -- Penalizacion por retraso ------------------------------------------
-  // Acumulador de tramos cerrados + marca del tramo abierto: el reloj se pausa
-  // al marcar "terminada" y se reanuda en cada rechazo. Solo cuenta el tiempo
-  // posterior a dueDate, por dias completos.
+  // -- Vencimiento y revaluacion -----------------------------------------
+  // Pasarse de la fecha limite cuesta el valor COMPLETO de la tarea: al vencer
+  // se escribe un asiento negativo y aqui queda la marca para no cobrarlo dos
+  // veces. Si despues se entrega y se acepta, se acredita el valor vigente.
+  overdueChargedAt       DateTime?
+  // Revaluacion: el asignado avisa que la tarea resulto mas dura de lo que se
+  // estimo. Mientras este pedida, el reloj de la fecha limite queda EN PAUSA y
+  // no se cobra nada; los jefes deciden nueva fecha y/o nueva votacion.
+  revaluationRequestedAt DateTime?
+  revaluationReason      String?   @db.Text
+
+  // Columnas de la penalizacion por dia, ya retirada. Se conservan para poder
+  // leer el historico; nada nuevo las escribe.
   lateAccruedDays    Decimal   @default(0) @db.Decimal(8, 3)
   lateClockStartedAt DateTime?
   effectivePoints    Decimal?  @db.Decimal(5, 2) // snapshot al aceptar
@@ -459,20 +468,14 @@ model ContributionSettings {
   // Extremos de la escala Fibonacci (1-2-3-5-8-13-21), no un rango continuo.
   minPoints             Int      @default(1)
   maxPoints             Int      @default(21)
-  // Penalizacion por dia de la etapa anterior. Se conserva para leer el
-  // historico; los descuentos vigentes son los de sprint (ver task-penalty).
-  penaltyPerDay         Decimal  @default(0.2) @db.Decimal(5, 2)
-  penaltyFloorRatio     Decimal  @default(0.5) @db.Decimal(3, 2)
   // Desacuerdo medido en PELDANOS de la escala, no en puntos.
   disagreementDelta     Int      @default(2)
   votingWindowHours     Int      @default(24)
   // --- Sprint -----------------------------------------------------------
   sprintLengthDays      Int      @default(14)
-  defaultCapacityPoints Int      @default(13)
-  /// Descuento por cada arrastre a otro sprint.
-  carryoverPenalty      Decimal  @default(0.2) @db.Decimal(3, 2)
-  /// Descuento por cada rechazo de los jefes.
-  reworkPenalty         Decimal  @default(0.25) @db.Decimal(3, 2)
+  // 21 es el tope de la escala: nadie se compromete a mas de una tarea
+  // maxima por sprint.
+  defaultCapacityPoints Int      @default(21)
   // --- Reparto del dinero -----------------------------------------------
   // La capa de la empresa NO se guarda: es el resto (1 - fundador - pozo), y
   // asi las tres siempre suman exactamente el neto.
@@ -663,6 +666,7 @@ enum TaskCompletionStatus {
 enum PointLedgerType {
   TASK_ACCEPTED // credito por tarea aceptada
   TASK_REVERTED // reverso: tarea reabierta despues de aceptada
+  TASK_OVERDUE // cobro automatico al pasarse de la fecha: -valor de la tarea
   SEED // back-fill de trabajo previo al sistema
   ADJUSTMENT // ajuste manual del dueno
 }

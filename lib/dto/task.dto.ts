@@ -61,6 +61,17 @@ export const TaskFiltersSchema = z.object({
   search: z.string().optional(),
 })
 
+/**
+ * Revaluación. Sin `resolve` es la solicitud del asignado; con `resolve` es la
+ * respuesta del jefe, que puede mover la fecha y reabrir la votación.
+ */
+export const RevaluationSchema = z.object({
+  reason: z.string().max(500).optional().nullable(),
+  resolve: z.boolean().optional(),
+  newDueDate: z.string().min(1).optional().nullable(),
+  reopenVoting: z.boolean().optional(),
+})
+
 export const ReorderTasksSchema = z.object({
   tasks: z.array(
     z.object({

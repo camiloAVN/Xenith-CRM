@@ -209,7 +209,74 @@ ${header('Xenith · Puntos de aporte', 'Tu tarea volvió a en progreso')}
 ${body(
   taskCard(ctx, commentBlock) +
     note(
-      `${ctx.reviewerName} no aceptó el cumplimiento. El contador de retraso volvió a correr desde el rechazo: vuelve a marcarla como terminada cuando esté lista.`
+      `${ctx.reviewerName} no aceptó el cumplimiento. Vuelve a marcarla como terminada cuando esté lista.`
+    )
+)}
+${cta(ctx.projectId, 'Ver la tarea')}
+${footer}${shellEnd}`
+}
+
+/* ── 6. Revaluación pedida — el asignado dice que la tarea es más dura ── */
+
+export function revaluationRequestedEmail(
+  ctx: TaskEmailContext & { requesterName: string; reason?: string | null; pointsValue: number | null }
+): string {
+  const reasonBlock = ctx.reason
+    ? `
+            <div style="margin:14px 0 0;padding:12px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;">
+              <p style="margin:0;font-size:13px;color:#97a3bb;line-height:1.6;white-space:pre-wrap;">${esc(ctx.reason)}</p>
+            </div>`
+    : ''
+
+  return `${shellStart}
+${header('Xenith · Puntos de aporte', 'Piden revaluar una tarea')}
+${body(
+  taskCard(ctx, reasonBlock) +
+    note(
+      `${ctx.requesterName} avisa que la tarea resultó más dura de lo que se estimó` +
+        (ctx.pointsValue != null ? ` (quedó en ${ctx.pointsValue} puntos)` : '') +
+        `. Mientras tanto la tarea está EN PAUSA: aunque se pase de la fecha límite no se le cobra nada. ` +
+        `Entren a decidir una fecha nueva y, si el equipo lo ve distinto, a votar los puntos otra vez.`
+    )
+)}
+${cta(ctx.projectId, 'Resolver la revaluación')}
+${footer}${shellEnd}`
+}
+
+/* ── 7. Revaluación resuelta — vuelve a correr el reloj ──────────────── */
+
+export function revaluationResolvedEmail(
+  ctx: TaskEmailContext & { reviewerName: string; reopenedVoting: boolean }
+): string {
+  return `${shellStart}
+${header('Xenith · Puntos de aporte', 'Revaluación resuelta')}
+${body(
+  taskCard(ctx) +
+    note(
+      `${ctx.reviewerName} resolvió la revaluación. ` +
+        (ctx.reopenedVoting
+          ? 'La votación de puntos se abrió otra vez: el equipo vuelve a estimar el tamaño de la tarea. '
+          : 'El valor en puntos se mantiene. ') +
+        'La tarea sale de pausa, así que la fecha límite vuelve a contar.'
+    )
+)}
+${cta(ctx.projectId, 'Ver la tarea')}
+${footer}${shellEnd}`
+}
+
+/* ── 8. Vencida — se cobro el valor completo ─────────────────────────── */
+
+export function taskOverdueEmail(
+  ctx: TaskEmailContext & { charged: number }
+): string {
+  return `${shellStart}
+${header('Xenith · Puntos de aporte', 'Se te venció una tarea')}
+${body(
+  taskCard(ctx) +
+    note(
+      `Se pasó la fecha límite sin entregar, así que se descontaron ${ctx.charged} puntos: ` +
+        `lo que vale la tarea. Si la terminas y los jefes la aceptan, se te acredita su valor vigente. ` +
+        `Y si de verdad era más dura de lo estimado, pide revaluación: el equipo puede ponerle otra fecha y votarla de nuevo.`
     )
 )}
 ${cta(ctx.projectId, 'Ver la tarea')}
