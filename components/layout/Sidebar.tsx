@@ -100,14 +100,14 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       >
         <div className="flex h-full flex-col">
           {/* Logo */}
-          <div className="flex h-16 items-center justify-between px-6 border-b border-gray-800">
+          <div className="flex h-20 items-center justify-between px-5 border-b border-gray-800">
             <Link href="/dashboard" className="flex items-center">
               <Image
                 src="/images/logo.png"
                 alt="XENITH"
-                width={200}
-                height={40}
-                className="h-9 w-auto object-contain"
+                width={320}
+                height={72}
+                className="h-14 w-auto object-contain"
                 priority
               />
             </Link>

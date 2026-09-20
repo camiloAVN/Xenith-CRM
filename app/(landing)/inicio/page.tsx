@@ -353,7 +353,6 @@ export default function LandingPage() {
         </div>
         <div className="wrap hero__inner">
           <div className="hero__copy">
-            <span className="eyebrow reveal">Xenith · Engineering Studio</span>
             <h1 className="h-display reveal" data-delay="1">
               <span className="word">Ingeniería</span>{' '}
               <span className="word">que</span>{' '}
@@ -391,10 +390,6 @@ export default function LandingPage() {
           <div className="hero__visual reveal" data-delay="2">
             <div className="hero__ring" />
             <div className="hero__frame hud" ref={tiltRef}>
-              <div className="hero__hud-label hud-tl">
-                <span className="dot" />XENITH · BARTENDER UNIT
-              </div>
-              <div className="hero__hud-label hud-br">STATUS: ONLINE</div>
               <div className="hero__scan" />
               <Image
                 src="/images/render_final.jpeg"
@@ -424,7 +419,6 @@ export default function LandingPage() {
           <div className="flagship__grid">
             <div className="flagship__visual reveal">
               <div className="flagship__frame hud">
-                <div className="hero__hud-label hud-tl"><span className="dot" />LIVE MIX</div>
                 <div className="hero__scan" />
                 <Image
                   src="/images/render_2.png"

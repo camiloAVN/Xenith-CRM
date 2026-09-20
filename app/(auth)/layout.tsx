@@ -16,13 +16,16 @@ export default function AuthLayout({
       </div>
 
       {/* Logo */}
-      <Link href="/inicio" className="absolute top-8 left-8 flex items-center group">
+      <Link
+        href="/inicio"
+        className="absolute top-6 left-1/2 -translate-x-1/2 sm:top-8 sm:left-8 sm:translate-x-0 flex items-center group"
+      >
         <Image
           src="/images/logo.png"
           alt="XENITH"
-          width={200}
-          height={48}
-          className="h-10 sm:h-11 w-auto object-contain transition-opacity duration-200 group-hover:opacity-85"
+          width={420}
+          height={110}
+          className="h-16 sm:h-20 w-auto object-contain transition-opacity duration-200 group-hover:opacity-85"
           priority
         />
       </Link>

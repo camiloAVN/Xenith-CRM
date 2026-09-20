@@ -599,6 +599,20 @@ begin
       'chat_id', chat, 'texto', texto, 'participante', fn_nombre(yo), 'participante_id', yo.id,
       'telegram_user_id', yo.telegram_user_id)));
   end if;
+
+  -- Vida en el grupo: el bot se mete de vez en cuando. Siempre contesta si lo
+  -- mencionan o si le responden a él; el resto del tiempo, solo a veces (ver
+  -- fn_grupo_puede_opinar: cooldown + tope diario + probabilidad).
+  if es_grupo and cmd is null and texto <> '' and archivo is null then
+    if texto ilike '%@xenith26_bot%'
+       or texto ~* '(^|\s)(bot|botito)(\s|,|\.|\?|!|$)'
+       or coalesce((msg -> 'reply_to_message' -> 'from' ->> 'is_bot')::boolean, false)
+       or fn_grupo_puede_opinar() then
+      return jsonb_build_array(fn_accion('__agente', jsonb_build_object(
+        'chat_id', chat, 'texto', texto, 'participante_id', yo.id,
+        'modo', 'grupo', 'reply_to', msg_id)));
+    end if;
+  end if;
   return '[]'::jsonb;
 end $$;
 
@@ -695,6 +709,7 @@ declare
   grupo bigint := fn_cfg_txt('grupo_chat_id')::bigint;
   faltan text;
   listos text;
+  detalle text;
   texto text;
   acts jsonb := '[]'::jsonb;
   s record;
@@ -709,16 +724,46 @@ begin
     from v_evidencias_hoy h join participantes p on p.id = h.participante_id
    where p.telegram_user_id is not null;
 
+  -- Quién lleva cuántos días sin subir nada: es la munición de la arenga.
+  select string_agg(
+           fn_nombre(p) || ' (' ||
+           case when u.ultima is null then 'nunca ha subido nada'
+                when (now()::date - u.ultima::date) = 0 then 'subió hoy'
+                when (now()::date - u.ultima::date) = 1 then 'ayer'
+                else (now()::date - u.ultima::date) || ' días sin subir' end || ')',
+           ', ' order by p.id)
+    into detalle
+    from participantes p
+    left join lateral (select max(e.creada_en) as ultima from evidencias e
+                        where e.participante_id = p.id and e.estado <> 'RECHAZADA') u on true
+   where p.telegram_user_id is not null;
+
   if faltan is null then
-    if hora >= 21 then acts := acts || fn_send(grupo, '🏆 Hoy todos subieron evidencia. ¡Así se hace, equipo!'); end if;
+    if hora >= 21 then acts := acts || fn_send(grupo, '🏆 Hoy todos subieron evidencia. Bien ahí, por una vez.'); end if;
   else
+    -- Texto de respaldo: si la IA no está disponible (sin API key, tope de
+    -- gasto, caída), el reclamo sale igual. Nunca se deja de joder.
     texto := case
       when hora < 15 then '☀️ Mediodía y todavía no veo evidencia de hoy de ' || faltan || '. ¿Qué hicieron hoy por sus metas? 📸'
       when hora < 18 then '⏰ Ya son las 3. ' || faltan || ', una foto y listo.'
       when hora < 21 then '🌆 ' || faltan || '… el día se acaba y sin evidencia. Los demás ya van sumando puntos 👀'
       else '🌙 Última llamada, ' || faltan || '. Hoy todavía cuenta.' end
       || coalesce(E'\n🔥 Hoy ya subieron: ' || listos, '');
-    acts := acts || fn_send(grupo, texto);
+
+    -- La arenga la escribe la IA con el brief de abajo; SQL le pega las
+    -- menciones para que el tag de Telegram funcione sí o sí.
+    acts := acts || fn_accion('__agente', jsonb_build_object(
+      'chat_id', grupo,
+      'modo', 'arenga',
+      'menciones', faltan,
+      'fallback', texto,
+      'texto',
+        'Son las ' || hora || ':00 en Bogotá, día ' ||
+        greatest(1, (now()::date - fn_cfg_txt('reto_inicio')::timestamptz::date)) || ' del reto.' || E'\n' ||
+        'Hoy NO han subido evidencia: ' || regexp_replace(faltan, '<[^>]+>', '', 'g') || '.' || E'\n' ||
+        coalesce('Hoy sí subieron: ' || regexp_replace(listos, '<[^>]+>', '', 'g') || '.' || E'\n', '') ||
+        'Última evidencia de cada uno: ' || coalesce(detalle, 'sin datos') || '.' || E'\n' ||
+        'Escribe la arenga para los que faltan.'));
   end if;
 
   -- Los miércoles al mediodía: preguntar por la meta más abandonada de cada uno

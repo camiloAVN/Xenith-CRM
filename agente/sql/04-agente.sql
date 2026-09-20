@@ -40,6 +40,10 @@ insert into config (clave, valor, descripcion) values
   ('ia_memoria_min', '30', 'Minutos que el agente recuerda la conversación'),
   ('ia_memoria_turnos', '4', 'Mensajes previos que se le mandan al modelo'),
   ('recordatorio_anticipo_min', '15', 'Minutos de anticipación del primer aviso de un recordatorio'),
+  ('ia_grupo_probabilidad', '0.18', 'Probabilidad de que el bot se meta en una conversación del grupo'),
+  ('ia_grupo_cooldown_min', '40', 'Minutos mínimos entre dos intervenciones del bot en el grupo'),
+  ('ia_grupo_dia', '8', 'Máximo de intervenciones del bot en el grupo por día'),
+  ('ia_grupo_ultimo', 'null', 'Última vez que el bot opinó en el grupo (la maneja fn_grupo_puede_opinar)'),
   ('xenith_url', '"https://xenith.com.co"', 'URL del CRM para los enlaces'),
   ('xenith_sondeo_desde', 'null', 'Última consulta de novedades de Xenith (la maneja fn_xenith_novedades)')
 on conflict (clave) do nothing;
@@ -289,6 +293,41 @@ language sql stable as $$
    where r.estado = 'PENDIENTE' and pid in (r.para, r.creado_por)
 $$;
 
+-- ------------------------------------------------------------ vida en el grupo
+
+/**
+ * ¿El bot se mete en esta conversación?
+ *
+ * Tres frenos, en este orden: que no hable encima de sí mismo (cooldown), que
+ * no se vuelva plaga (tope diario) y que no conteste todo (probabilidad). Un
+ * bot que responde cada mensaje deja de ser gracioso en dos días; uno que cae
+ * de vez en cuando se siente parte del parche.
+ *
+ * Consume la decisión: si dice que sí, deja marcado el momento, así que dos
+ * mensajes seguidos no pueden colarse los dos.
+ */
+create or replace function fn_grupo_puede_opinar() returns boolean
+language plpgsql as $$
+declare
+  ultimo timestamptz := nullif(fn_cfg_txt('ia_grupo_ultimo'), '')::timestamptz;
+  hoy int;
+begin
+  if ultimo is not null
+     and ultimo > now() - make_interval(mins => fn_cfg_txt('ia_grupo_cooldown_min')::int) then
+    return false;
+  end if;
+
+  select count(*) into hoy from uso_ia
+   where herramienta = '__grupo'
+     and (creado_en at time zone 'America/Bogota')::date = (now() at time zone 'America/Bogota')::date;
+  if hoy >= fn_cfg_txt('ia_grupo_dia')::int then return false; end if;
+
+  if random() >= fn_cfg_txt('ia_grupo_probabilidad')::numeric then return false; end if;
+
+  update config set valor = to_jsonb(now()) where clave = 'ia_grupo_ultimo';
+  return true;
+end $$;
+
 -- ------------------------------------------------------------ agente de IA
 
 create or replace function fn_texto_uso_ia(pid int) returns text
@@ -311,6 +350,9 @@ declare
   yo participantes;
   chat bigint := (p ->> 'chat_id')::bigint;
   texto text := trim(coalesce(p ->> 'texto', ''));
+  -- 'privado' (por defecto), 'grupo' (se metió en la conversación) o
+  -- 'arenga' (el reloj le pidió que joda a los que no han hecho nada).
+  modo text := coalesce(p ->> 'modo', 'privado');
   hoy_n int;
   mes_usd numeric;
   historial jsonb;
@@ -320,7 +362,11 @@ declare
   herramientas jsonb;
 begin
   select * into yo from participantes where id = (p ->> 'participante_id')::int;
-  if yo.id is null or chat is null then return jsonb_build_object('ok', false, 'acts', '[]'::jsonb); end if;
+  if chat is null then return jsonb_build_object('ok', false, 'acts', '[]'::jsonb); end if;
+  -- La arenga la dispara el reloj, no una persona: no hay `yo`.
+  if yo.id is null and modo <> 'arenga' then
+    return jsonb_build_object('ok', false, 'acts', '[]'::jsonb);
+  end if;
 
   if length(texto) > fn_cfg_txt('ia_max_caracteres')::int then
     return jsonb_build_object('ok', false, 'acts', jsonb_build_array(fn_send(chat,
@@ -329,8 +375,9 @@ begin
 
   select count(*) into hoy_n from uso_ia
    where participante_id = yo.id
+     and herramienta is distinct from '__grupo'
      and (creado_en at time zone 'America/Bogota')::date = ahora::date;
-  if hoy_n >= fn_cfg_txt('ia_mensajes_dia')::int then
+  if modo = 'privado' and hoy_n >= fn_cfg_txt('ia_mensajes_dia')::int then
     return jsonb_build_object('ok', false, 'acts', jsonb_build_array(fn_send(chat,
       '🔋 Llegaste al límite de ' || fn_cfg_txt('ia_mensajes_dia') || ' mensajes con la IA por hoy. '
       || 'Mañana sigo. Mientras tanto funcionan /tareas, /recordatorios y /metas.')));
@@ -417,6 +464,45 @@ begin
       'description', 'Muestra el avance de quien escribe en sus metas del reto anual.',
       'input_schema', jsonb_build_object('type', 'object', 'additionalProperties', false, 'properties', '{}'::jsonb)));
 
+  -- En el grupo el bot es un contertulio, no un asistente: ni herramientas ni
+  -- memoria, una sola línea y permiso explícito para quedarse callado.
+  if modo = 'grupo' then
+    sistema := 'Estás en el grupo de WhatsApp... perdón, de Telegram, del parche de Xenith: Camilo, Nicolás y David (Potro), '
+      || 'tres socios que se joden entre ellos todo el día y tienen un reto de un año con plata de por medio.' || E'\n'
+      || 'Acabas de leer un mensaje del grupo. Suelta UNA sola línea, corta, colombiana y mamagallista, como un cuarto '
+      || 'integrante que se mete a joder. Parcero, marica, güevón, no joda, hágale pues, deje de gaminear.' || E'\n'
+      || 'Reglas: máximo 15 palabras. Nada de saludar, explicar, ofrecer ayuda ni hacer preguntas de asistente. '
+      || 'No repitas lo que dijeron. Si no se te ocurre nada bueno, responde exactamente: NADA' || E'\n'
+      || 'Una de las metas del reto se llama "Maria"; nunca escribas otro nombre para ella.';
+    return jsonb_build_object('ok', true,
+      'ctx', jsonb_build_object('participante_id', yo.id, 'chat_id', chat, 'texto', texto,
+                                'modo', 'grupo', 'reply_to', p ->> 'reply_to'),
+      'body', jsonb_build_object(
+        'model', fn_cfg_txt('ia_modelo'),
+        'max_tokens', 100,
+        'system', sistema,
+        'messages', jsonb_build_array(jsonb_build_object('role', 'user', 'content',
+          fn_nombre(yo) || ' escribió en el grupo: ' || texto))));
+  end if;
+
+  if modo = 'arenga' then
+    sistema := 'Eres el bot del reto anual del parche de Xenith: Camilo, Nicolás y David (Potro). '
+      || 'Tu trabajo ahora es joderlos para que no abandonen el reto.' || E'\n'
+      || 'Con los datos que te paso, escribe UNA arenga de máximo 25 palabras: colombiana, grosera, mamagallista y '
+      || 'con nombre propio. Si alguien lleva días sin subir nada, se lo echas en cara. Si todos cumplieron, los felicitas seco.' || E'\n'
+      || 'Nada de listas, nada de emojis de más (uno basta), nada de explicar el reto: ellos ya saben qué es. '
+      || 'No inventes datos: usa solo los que te doy.' || E'\n'
+      || 'Una de las metas del reto se llama "Maria"; nunca escribas otro nombre para ella.';
+    return jsonb_build_object('ok', true,
+      'ctx', jsonb_build_object('chat_id', chat, 'modo', 'arenga',
+                                'menciones', p ->> 'menciones', 'fallback', p ->> 'fallback'),
+      'body', jsonb_build_object(
+        'model', fn_cfg_txt('ia_modelo'),
+        'max_tokens', 120,
+        'system', sistema,
+        'messages', jsonb_build_array(jsonb_build_object('role', 'user', 'content', texto))));
+  end if;
+
   return jsonb_build_object('ok', true,
     'ctx', jsonb_build_object('participante_id', yo.id, 'chat_id', chat, 'texto', texto),
     'body', jsonb_build_object(
@@ -452,6 +538,42 @@ declare
   r recordatorios;
 begin
   select * into yo from participantes where id = (ctx ->> 'participante_id')::int;
+
+  -- Grupo y arenga: una sola línea, sin herramientas y sin memoria.
+  if (ctx ->> 'modo') in ('grupo', 'arenga') then
+    select string_agg(b ->> 'text', E'\n') into texto_modelo
+      from jsonb_array_elements(coalesce(resp -> 'content', '[]'::jsonb)) b
+     where b ->> 'type' = 'text';
+    texto_modelo := trim(coalesce(texto_modelo, ''));
+
+    insert into uso_ia (participante_id, tokens_entrada, tokens_salida, costo_usd, herramienta, error)
+    values (coalesce(yo.id, 1), tin, tout,
+            (tin * fn_cfg_txt('ia_precio_entrada')::numeric + tout * fn_cfg_txt('ia_precio_salida')::numeric) / 1000000,
+            '__' || (ctx ->> 'modo'),
+            case when resp -> 'content' is null then left(resp::text, 300) end);
+
+    if ctx ->> 'modo' = 'arenga' then
+      -- Si el modelo falla, igual sale el reclamo: el texto de respaldo lo
+      -- armó SQL antes de llamarlo.
+      if texto_modelo = '' or resp -> 'content' is null then
+        texto_modelo := coalesce(ctx ->> 'fallback', '');
+        if texto_modelo = '' then return acts; end if;
+        return jsonb_build_array(fn_send(chat, texto_modelo));
+      end if;
+      -- Las menciones las pone SQL: así el tag de Telegram siempre funciona,
+      -- diga lo que diga el modelo.
+      return jsonb_build_array(fn_send(chat,
+        fn_html(texto_modelo) || coalesce(E'\n' || (ctx ->> 'menciones'), '')));
+    end if;
+
+    -- En el grupo, quedarse callado es una respuesta válida.
+    if texto_modelo = '' or upper(texto_modelo) = 'NADA' or resp -> 'content' is null then
+      return acts;
+    end if;
+    return jsonb_build_array(fn_send(chat, fn_html(texto_modelo), null,
+      nullif(ctx ->> 'reply_to', '')::bigint));
+  end if;
+
   if yo.id is null then return acts; end if;
 
   if resp -> 'content' is null then
