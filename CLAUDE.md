@@ -137,10 +137,24 @@ Mide cuánto aporta cada persona a un proyecto y con eso calcula su porcentaje d
 | Rol | Quién es | Puede |
 |---|---|---|
 | **Dueño** | `UserRole.SUPERADMIN` | Crear proyectos, nombrar jefes, asignar puntos a mano, editar parámetros |
-| **Jefe de proyecto** | `ProjectMember` con rol `PROJECT_MANAGER` o `ADMIN` | Crear/asignar tareas, aceptar o rechazar cumplimientos |
-| **Miembro** | cualquier `ProjectMember` | Ejecutar sus tareas y votar el valor de las ajenas |
+| **Jefe de proyecto** | `ProjectMember` con rol `PROJECT_MANAGER` o `ADMIN` | **Editar, borrar y mover fechas**; aceptar o rechazar cumplimientos; resolver revaluaciones; manejar sprints |
+| **Miembro** | cualquier `ProjectMember` | **Crear tareas** (con su primera fecha), ejecutar las suyas, votar el valor de las ajenas y comentar |
 
 Ser jefe es un **permiso encima de ser miembro**, no un rol paralelo: un jefe también recibe tareas y gana puntos. Por eso un equipo de 3 jefes y nadie más funciona sin lógica especial.
+
+**Quién toca qué en una tarea** (decisión del equipo, 20-sep-2026): el trabajo lo levanta quien lo ve, pero nadie se corre su propio plazo.
+
+| Acción | Quién |
+|---|---|
+| Crear tarea, asignarla y ponerle su **primera** fecha | cualquier miembro (`canCreateTasks`) |
+| Cambiar fecha, título, descripción, prioridad, asignado o sprint | **solo jefes** (`canManageTasks`) |
+| Borrar | solo jefes |
+| Mover la tarjeta `TODO → IN_PROGRESS` y anotar horas | el asignado (`ASSIGNEE_EDITABLE_FIELDS`: status, actualHours, order) |
+| Votar el valor | todo el equipo **menos el asignado** |
+| Comentar | todos |
+| Aceptar o rechazar el cumplimiento | los firmantes (ver `getApprovalRequirement`) |
+
+Que el asignado no pueda mover su fecha es lo que sostiene el vencimiento: si pudiera correrla, pasarse no costaría nada. Para contar avances están los comentarios, que sí son de todos.
 
 Dos detalles que hay que respetar:
 - `Project.assignedTo` **cuenta como jefe** aunque no tenga fila en `ProjectMember` (proyectos creados antes de esa tabla se quedarían sin ningún jefe).

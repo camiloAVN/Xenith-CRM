@@ -96,8 +96,12 @@ const FIELD_LABELS: Record<TrackedField, string> = {
 
 export const taskService = {
   /**
-   * Crea una tarea. Solo un jefe del proyecto (o el dueño) puede hacerlo, y la
-   * tarea nace con la ventana de votación abierta.
+   * Crea una tarea. La crea CUALQUIER miembro del proyecto: el trabajo lo
+   * levanta quien lo ve, no solo el jefe.
+   *
+   * Quien la crea le pone su primera fecha de entrega; cambiarla después ya es
+   * cosa de los jefes, para que nadie se corra su propio plazo. Y la votación
+   * no se toca: el valor lo sigue poniendo el equipo, sin el asignado.
    *
    * Puede nacer SIN asignado (backlog estimado): el equipo la valora primero y
    * se reparte en la planeación del sprint.
@@ -110,8 +114,8 @@ export const taskService = {
     if (!project) throw new Error('Proyecto no encontrado')
 
     const perms = await getProjectPermissions(projectId, currentUserId)
-    if (!perms.canManageTasks) {
-      throw new TaskPermissionError('Solo los jefes del proyecto pueden crear tareas')
+    if (!perms.canCreateTasks) {
+      throw new TaskPermissionError('Solo los miembros del proyecto pueden crear tareas')
     }
 
     // El asignado tiene que pertenecer al equipo: si no, nunca podría cobrar
@@ -225,8 +229,10 @@ export const taskService = {
     if (!existing) throw new Error('Tarea no encontrada')
 
     // Un jefe edita cualquier campo. El asignado solo puede EJECUTAR su tarea:
-    // mover la tarjeta, anotar horas, describir avances. No puede reasignarse
-    // la tarea, correr su fecha límite ni cambiarle la prioridad.
+    // mover la tarjeta y anotar horas. Editar la tarea —título, descripción,
+    // prioridad, asignado, sprint y sobre todo la FECHA— es de los jefes: si el
+    // asignado pudiera correr su propio plazo, el vencimiento no costaría nada.
+    // Para contar avances están los comentarios, que sí son de todos.
     const perms = await getProjectPermissions(existing.projectId, currentUserId)
     if (!perms.canManageTasks) {
       if (existing.assignedTo !== currentUserId) {

@@ -39,14 +39,14 @@ export const UpdateTaskFieldsSchema = z.object({
   tags: z.array(z.string()).optional(),
 })
 
-/** Campos que el asignado puede tocar sin ser jefe: ejecutar su tarea. */
-export const ASSIGNEE_EDITABLE_FIELDS = [
-  'status',
-  'description',
-  'actualHours',
-  'order',
-  'tags',
-] as const
+/**
+ * Campos que el asignado puede tocar sin ser jefe: EJECUTAR su tarea.
+ *
+ * Nada de definición (título, descripción, prioridad, fecha, asignado,
+ * sprint): eso es editar, y editar es de los jefes. Para contar cómo va el
+ * trabajo están los comentarios, abiertos a todo el equipo.
+ */
+export const ASSIGNEE_EDITABLE_FIELDS = ['status', 'actualHours', 'order'] as const
 
 export const UpdateTaskSchema = UpdateTaskFieldsSchema
 

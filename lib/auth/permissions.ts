@@ -29,8 +29,14 @@ export interface ProjectPermissions {
   canManageMembers: boolean
   /** Nombrar o destituir jefes de proyecto — solo el dueño. */
   canManageLeads: boolean
-  /** Crear tareas, asignarlas y aceptar cumplimientos. */
+  /**
+   * Editar, borrar, mover fechas y aceptar cumplimientos. Solo jefes.
+   *
+   * NO incluye crear: eso lo puede hacer cualquier miembro (`canCreateTasks`).
+   */
   canManageTasks: boolean
+  /** Crear tareas y ponerles su primera fecha de entrega. Todo el equipo. */
+  canCreateTasks: boolean
   /** Votar el valor en puntos de las tareas de otros. */
   canVote: boolean
   /** Editar los parámetros del sistema para este proyecto. */
@@ -102,6 +108,9 @@ export async function getProjectPermissions(
     canManageMembers: owner || isLead,
     canManageLeads: owner,
     canManageTasks: owner || isLead,
+    // Cualquiera del equipo levanta trabajo. El poder del jefe es otro:
+    // aceptar cumplimientos, mover fechas y editar o borrar.
+    canCreateTasks: isMember || owner,
     canVote: isMember,
     canEditSettings: owner,
   }

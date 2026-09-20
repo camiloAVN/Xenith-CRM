@@ -324,6 +324,7 @@ export function TaskDetailPanel({
               <div>
                 {editingTitle ? (
                   <textarea
+                    readOnly={!canManageTasks}
                     value={titleDraft}
                     onChange={(e) => setTitleDraft(e.target.value)}
                     onBlur={handleTitleSave}
@@ -401,6 +402,7 @@ export function TaskDetailPanel({
               <div>
                 <label className="text-xs text-gray-500 block mb-1.5">Descripción</label>
                 <textarea
+                  readOnly={!canManageTasks}
                   value={descDraft}
                   onChange={(e) => setDescDraft(e.target.value)}
                   onBlur={handleDescSave}

@@ -53,6 +53,7 @@ interface ProjectPermissions {
   canManageMembers: boolean
   canManageLeads: boolean
   canManageTasks: boolean
+  canCreateTasks: boolean
   canVote: boolean
   canEditSettings: boolean
 }
@@ -202,6 +203,8 @@ export default function ProjectDetailPage({
   })()
 
   const canManageTasks = project?.permissions?.canManageTasks ?? false
+  // Crear es de todo el equipo; editar, mover fechas y borrar, solo de jefes.
+  const canCreateTasks = project?.permissions?.canCreateTasks ?? false
   const canCreateTask =
     newTaskTitle.trim().length > 0
 
@@ -364,7 +367,7 @@ export default function ProjectDetailPage({
                 Editar
               </Button>
             </Link>
-            {canManageTasks && (
+            {canCreateTasks && (
               <Button
                 size="sm"
                 onClick={handleAddTask}
@@ -460,7 +463,7 @@ export default function ProjectDetailPage({
             projectId={id}
             initialTasks={kanbanBoard}
             onTaskClick={handleTaskClick}
-            onAddTask={canManageTasks ? handleAddTask : undefined}
+            onAddTask={canCreateTasks ? handleAddTask : undefined}
             onColumnsChange={setKanbanBoard}
           />
         )}
