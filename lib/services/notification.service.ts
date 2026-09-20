@@ -262,8 +262,26 @@ export const notificationService = {
       if (!loaded) return
       const { task, ctx } = loaded
 
+      // A quienes PUEDEN resolverla: los jefes, menos quien la pide. Si el que
+      // pide es el único jefe no queda nadie, y entonces avisa al dueño: una
+      // revaluación sin destinatario es una tarea congelada en silencio.
       const leadIds = await getProjectLeadIds(task.projectId)
-      const to = await resolveRecipients(leadIds.filter((id: string) => id !== requesterId))
+      let destinatarios = leadIds.filter((id: string) => id !== requesterId)
+      if (destinatarios.length === 0) {
+        const owners = await prisma.user.findMany({
+          where: { role: 'SUPERADMIN', isActive: true },
+          select: { id: true },
+        })
+        destinatarios = owners.map((o) => o.id).filter((id) => id !== requesterId)
+      }
+      // Último recurso: el que pide es el único jefe Y el dueño. Igual se le
+      // avisa al resto del equipo, aunque no puedan resolverla: pausar tu
+      // propio reloj sin que nadie se entere es justo lo que no queremos.
+      if (destinatarios.length === 0) {
+        const memberIds = await getProjectMemberIds(task.projectId)
+        destinatarios = memberIds.filter((id) => id !== requesterId)
+      }
+      const to = await resolveRecipients(destinatarios)
       if (to.length === 0) return
 
       const [requester] = await resolveRecipients([requesterId])
