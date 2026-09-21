@@ -30,12 +30,17 @@ export interface ProjectPermissions {
   /** Nombrar o destituir jefes de proyecto — solo el dueño. */
   canManageLeads: boolean
   /**
-   * Editar, borrar, mover fechas y aceptar cumplimientos. Solo jefes.
+   * Mover fechas, reasignar, cambiar de sprint, borrar y aceptar
+   * cumplimientos. Solo jefes.
    *
-   * NO incluye crear: eso lo puede hacer cualquier miembro (`canCreateTasks`).
+   * NO incluye crear ni describir: crear la tarea y editar su definición
+   * (título, descripción, prioridad, estimado, tags) lo puede hacer cualquier
+   * miembro (`canCreateTasks` / `MEMBER_EDITABLE_FIELDS`).
    */
   canManageTasks: boolean
-  /** Crear tareas y ponerles su primera fecha de entrega. Todo el equipo. */
+  /**
+   * Crear tareas con su primera fecha y editar su definición. Todo el equipo.
+   */
   canCreateTasks: boolean
   /** Votar el valor en puntos de las tareas de otros. */
   canVote: boolean

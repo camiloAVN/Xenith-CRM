@@ -147,7 +147,8 @@ Ser jefe es un **permiso encima de ser miembro**, no un rol paralelo: un jefe ta
 | Acción | Quién |
 |---|---|
 | Crear tarea, asignarla y ponerle su **primera** fecha | cualquier miembro (`canCreateTasks`) |
-| Cambiar fecha, título, descripción, prioridad, asignado o sprint | **solo jefes** (`canManageTasks`) |
+| Cambiar título, descripción, prioridad, estimado o tags | cualquier miembro (`MEMBER_EDITABLE_FIELDS`, 21-sep-2026) |
+| Cambiar **fecha**, asignado o sprint | **solo jefes** (`canManageTasks`) |
 | Borrar | solo jefes |
 | Mover la tarjeta `TODO → IN_PROGRESS` y anotar horas | el asignado (`ASSIGNEE_EDITABLE_FIELDS`: status, actualHours, order) |
 | Votar el valor | todo el equipo **menos el asignado** |
@@ -370,7 +371,7 @@ El módulo de tareas **no usa Zustand**: el estado vive en `proyectos/[id]/page.
 
 Zod en `lib/validations/` (entidades legadas) y `lib/dto/` (tareas). Formularios con React Hook Form + `@hookform/resolvers/zod`.
 
-`CreateTaskSchema` exige `assignedTo` y `dueDate`. `UpdateTaskFieldsSchema` permite omitirlos pero **no vaciarlos**. `ASSIGNEE_EDITABLE_FIELDS` lista lo que puede tocar el asignado sin ser jefe.
+`CreateTaskSchema` exige `assignedTo` y `dueDate`. `UpdateTaskFieldsSchema` permite omitirlos pero **no vaciarlos**. `MEMBER_EDITABLE_FIELDS` es la definición que puede editar cualquier miembro (título, descripción, prioridad, estimado, tags) y `ASSIGNEE_EDITABLE_FIELDS` lo que además puede tocar el asignado (status, horas, orden).
 
 ### PDF Generation
 

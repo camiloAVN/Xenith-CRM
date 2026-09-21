@@ -203,7 +203,8 @@ export default function ProjectDetailPage({
   })()
 
   const canManageTasks = project?.permissions?.canManageTasks ?? false
-  // Crear es de todo el equipo; editar, mover fechas y borrar, solo de jefes.
+  // Crear y describir es de todo el equipo; mover fechas, reasignar y
+  // borrar, solo de jefes.
   const canCreateTasks = project?.permissions?.canCreateTasks ?? false
   const canCreateTask =
     newTaskTitle.trim().length > 0
@@ -489,6 +490,9 @@ export default function ProjectDetailPage({
         users={users}
         currentUserId={session?.user?.id as string ?? ''}
         canManageTasks={canManageTasks}
+        // Describir el trabajo es de todo el equipo; mover fechas, reasignar
+        // y borrar sigue siendo de los jefes.
+        canEditDetails={canCreateTasks}
         isOpen={isPanelOpen}
         onClose={() => {
           setIsPanelOpen(false)

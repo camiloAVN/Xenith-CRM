@@ -66,6 +66,11 @@ interface TaskDetailPanelProps {
   currentUserId: string
   /** Permisos del usuario en este proyecto; sin ellos se asume el mínimo. */
   canManageTasks?: boolean
+  /**
+   * Miembro del proyecto: puede describir el trabajo (título, descripción,
+   * prioridad, estimado) aunque no sea jefe.
+   */
+  canEditDetails?: boolean
   isOpen: boolean
   onClose: () => void
   onTaskUpdated?: (task: TaskDetail) => void
@@ -139,6 +144,7 @@ export function TaskDetailPanel({
   users = [],
   currentUserId,
   canManageTasks = false,
+  canEditDetails = false,
   isOpen,
   onClose,
   onTaskUpdated,
@@ -324,7 +330,7 @@ export function TaskDetailPanel({
               <div>
                 {editingTitle ? (
                   <textarea
-                    readOnly={!canManageTasks}
+                    readOnly={!canEditDetails}
                     value={titleDraft}
                     onChange={(e) => setTitleDraft(e.target.value)}
                     onBlur={handleTitleSave}
@@ -344,8 +350,12 @@ export function TaskDetailPanel({
                   />
                 ) : (
                   <h2
-                    className="text-xl font-semibold text-gray-100 cursor-text hover:text-white transition-colors leading-snug"
+                    className={cn(
+                      'text-xl font-semibold text-gray-100 transition-colors leading-snug',
+                      canEditDetails && 'cursor-text hover:text-white'
+                    )}
                     onClick={() => {
+                      if (!canEditDetails) return
                       setTitleDraft(ft.title)
                       setEditingTitle(true)
                     }}
@@ -402,7 +412,7 @@ export function TaskDetailPanel({
               <div>
                 <label className="text-xs text-gray-500 block mb-1.5">Descripción</label>
                 <textarea
-                  readOnly={!canManageTasks}
+                  readOnly={!canEditDetails}
                   value={descDraft}
                   onChange={(e) => setDescDraft(e.target.value)}
                   onBlur={handleDescSave}

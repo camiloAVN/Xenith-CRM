@@ -5,6 +5,7 @@ import {
   UpdateTaskDTO,
   TaskFiltersDTO,
   ASSIGNEE_EDITABLE_FIELDS,
+  MEMBER_EDITABLE_FIELDS,
 } from '@/lib/dto/task.dto'
 import { TaskStatus } from '@prisma/client'
 import { getProjectPermissions, getProjectMemberIds } from '@/lib/auth/permissions'
@@ -228,25 +229,32 @@ export const taskService = {
     })
     if (!existing) throw new Error('Tarea no encontrada')
 
-    // Un jefe edita cualquier campo. El asignado solo puede EJECUTAR su tarea:
-    // mover la tarjeta y anotar horas. Editar la tarea —título, descripción,
-    // prioridad, asignado, sprint y sobre todo la FECHA— es de los jefes: si el
-    // asignado pudiera correr su propio plazo, el vencimiento no costaría nada.
-    // Para contar avances están los comentarios, que sí son de todos.
+    // Un jefe edita cualquier campo. Cualquier miembro puede DESCRIBIR el
+    // trabajo (título, descripción, prioridad, estimado, tags) y el asignado,
+    // además, EJECUTAR su tarea: mover la tarjeta y anotar horas.
+    //
+    // Lo que sigue siendo de los jefes es la FECHA —si el asignado pudiera
+    // correr su propio plazo, el vencimiento no costaría nada— junto con el
+    // asignado y el sprint, que son el compromiso.
     const perms = await getProjectPermissions(existing.projectId, currentUserId)
     if (!perms.canManageTasks) {
-      if (existing.assignedTo !== currentUserId) {
+      if (!perms.isMember) {
         throw new TaskPermissionError('No tienes permiso para editar esta tarea')
       }
+      const isAssignee = existing.assignedTo === currentUserId
+      const allowed: string[] = [
+        ...MEMBER_EDITABLE_FIELDS,
+        ...(isAssignee ? ASSIGNEE_EDITABLE_FIELDS : []),
+      ]
       const touched = Object.keys(data).filter(
         (k) => (data as Record<string, unknown>)[k] !== undefined
       )
-      const forbidden = touched.filter(
-        (k) => !ASSIGNEE_EDITABLE_FIELDS.includes(k as never)
-      )
+      const forbidden = touched.filter((k) => !allowed.includes(k))
       if (forbidden.length > 0) {
         throw new TaskPermissionError(
-          `Solo un jefe del proyecto puede cambiar: ${forbidden.join(', ')}`
+          isAssignee
+            ? `Solo un jefe del proyecto puede cambiar: ${forbidden.join(', ')}`
+            : `Solo un jefe del proyecto o quien la tenga asignada puede cambiar: ${forbidden.join(', ')}`
         )
       }
 

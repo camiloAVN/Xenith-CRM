@@ -42,11 +42,28 @@ export const UpdateTaskFieldsSchema = z.object({
 /**
  * Campos que el asignado puede tocar sin ser jefe: EJECUTAR su tarea.
  *
- * Nada de definición (título, descripción, prioridad, fecha, asignado,
- * sprint): eso es editar, y editar es de los jefes. Para contar cómo va el
- * trabajo están los comentarios, abiertos a todo el equipo.
+ * Mover la tarjeta y anotar horas es del asignado y de nadie más: un
+ * compañero no arranca ni cierra trabajo ajeno.
  */
 export const ASSIGNEE_EDITABLE_FIELDS = ['status', 'actualHours', 'order'] as const
+
+/**
+ * Campos de DEFINICIÓN que puede tocar cualquier miembro del proyecto, sea
+ * jefe o no (decisión del dueño, 21-sep-2026): describir bien el trabajo es
+ * de todos, y obligar a un jefe para corregir un título o escribir la
+ * descripción solo hacía que la tarea se quedara vacía.
+ *
+ * Lo que NO está aquí sigue siendo de los jefes: `dueDate` (si el asignado
+ * pudiera correr su propio plazo, el vencimiento no costaría nada),
+ * `assignedTo` y `sprintId` (el compromiso del sprint).
+ */
+export const MEMBER_EDITABLE_FIELDS = [
+  'title',
+  'description',
+  'priority',
+  'estimatedHours',
+  'tags',
+] as const
 
 export const UpdateTaskSchema = UpdateTaskFieldsSchema
 
@@ -107,6 +124,7 @@ export const UpdateCommentSchema = z.object({
 
 export type CreateTaskDTO = z.infer<typeof CreateTaskSchema>
 export type AssigneeEditableField = (typeof ASSIGNEE_EDITABLE_FIELDS)[number]
+export type MemberEditableField = (typeof MEMBER_EDITABLE_FIELDS)[number]
 export type UpdateTaskDTO = z.infer<typeof UpdateTaskSchema>
 export type TaskFiltersDTO = z.infer<typeof TaskFiltersSchema>
 export type ReorderTasksDTO = z.infer<typeof ReorderTasksSchema>
