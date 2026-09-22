@@ -205,7 +205,7 @@ Se reabre aceptada   → IN_PROGRESS · asiento negativo TASK_REVERTED
 
 - Vota todo el equipo **menos el asignado**.
 - **Escala Fibonacci 1-2-3-5-8-13-21** (`lib/services/point-scale.ts`), con **anclas** fijas por peldaño (qué significa un 5 en tiempo real de trabajo). Las anclas se muestran al votar y en el correo: una escala sin anclas se infla sola.
-- **Cierra por lo que ocurra primero:** votan todos los elegibles → cierra de inmediato; o vence el plazo (24h configurables).
+- **Cierra por lo que ocurra primero:** se alcanza el quórum → cierra de inmediato; o vence el plazo (24h configurables). El quórum son **2 votos** (`minVotes`), o **1** si el equipo es de dos y solo hay un votante posible — no espera a que opine todo el mundo (decisión del dueño, 21-sep-2026: con 4 personas, un voto que no llegaba dejaba tareas colgadas semanas). El barrido perezoso también cierra las que ya tienen quórum aunque su plazo siga vivo, así que las que quedaron colgadas se liquidan solas al abrir el tablero.
 - Valor = **mediana pegada al peldaño más cercano** (`snapToScale`). Los empates **bajan**: entre 8 y 13 se acredita 8, que es la dirección que no premia inflar. El ledger solo guarda valores de la escala.
 - Quórum efectivo = `min(minVotes, votantes elegibles)`. Sin él, un equipo de 2 nunca alcanzaría `minVotes = 2`.
 - **Sin quórum pero con votos → se usa igual su mediana**, marcada `reachedQuorum: false`. Castigar al asignado porque un compañero no votó es cobrarle algo que no está en sus manos. Solo con CERO votos cae al mínimo de la escala (1).
@@ -389,6 +389,8 @@ Organización: `ui/` (primitivos), `forms/`, `layout/`, `dashboard/`, `public/`,
 ### Project Detail Page (`/dashboard/proyectos/[id]`)
 
 Página cliente con tres vistas conmutables. Todo sale de `/api/v1/`.
+
+**Cargar tareas NO puede prender el spinner de página.** La página tiene dos efectos separados: uno carga el proyecto (spinner de página) y otro las tareas al cambiar filtros o alcance de sprint (overlay sobre el tablero). Unirlos hacía que cambiar de sprint desmontara todo el árbol, y al remontarse `SprintBar` perdía su `scopeInitialized` y devolvía el tablero al sprint activo: seleccionabas un sprint y volvía solo al de siempre.
 
 - `KanbanBoard.tsx` — DnD con `@dnd-kit`. Escritorio: scroll horizontal con indicadores. Móvil: selector de columna + columna única. Al soltar llama `reorder` y **revierte en pantalla si el servidor rechaza**.
 - `KanbanColumn.tsx` — columna droppable; `fullWidth` para móvil. El botón "+" solo se pasa a la columna TODO.

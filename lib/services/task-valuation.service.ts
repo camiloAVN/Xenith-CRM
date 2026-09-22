@@ -8,6 +8,7 @@ import {
   getEligibleVoterIds,
   canVoteOnTask,
 } from '@/lib/services/task-lifecycle'
+import { getProjectMemberIds } from '@/lib/auth/permissions'
 import { TaskPermissionError } from '@/lib/services/task.service'
 import { notificationService } from '@/lib/services/notification.service'
 import {
@@ -129,12 +130,13 @@ export const taskValuationService = {
       update: { value },
     })
 
-    // Si ya votaron TODOS los que podian votar, no tiene sentido esperar a que
-    // venzan las 24h: el resultado no puede cambiar. La ventana se cierra ya y
-    // la tarea queda con su valor. El plazo solo existe para el caso en que
-    // alguien no vote.
+    // Con el quórum basta: dos votos cierran la votación (uno solo si el
+    // equipo es de dos y solo hay un votante posible). Esperar a que opine
+    // todo el mundo dejaba tareas colgadas semanas por un voto que no llegaba,
+    // y la mediana de dos ya es un valor del equipo, no de una persona.
     const voteCount = await prisma.taskPointVote.count({ where: { taskId } })
-    if (eligible.length > 0 && voteCount >= eligible.length) {
+    const quorum = effectiveQuorum(settings.minVotes, eligible.length)
+    if (eligible.length > 0 && voteCount >= quorum) {
       await this.settleTask(taskId, { force: true })
     }
 
@@ -222,18 +224,52 @@ export const taskValuationService = {
    * abrir el tablero).
    */
   async settleExpired(projectId?: string): Promise<string[]> {
-    const expired = await prisma.task.findMany({
+    const now = new Date()
+    // Se traen TODAS las votaciones abiertas, no solo las vencidas: una que ya
+    // alcanzó el quórum también se cierra aquí. Es lo que rescata a las tareas
+    // que quedaron colgadas esperando un voto que no iba a llegar.
+    const open = await prisma.task.findMany({
       where: {
         ...(projectId ? { projectId } : {}),
         valuationStatus: { not: 'VALUED' },
-        votingClosesAt: { lte: new Date() },
       },
-      select: { id: true },
+      select: {
+        id: true,
+        projectId: true,
+        assignedTo: true,
+        votingClosesAt: true,
+        _count: { select: { pointVotes: true } },
+      },
     })
 
+    // Los votantes elegibles son los miembros del proyecto menos el asignado,
+    // así que basta con pedir el equipo UNA vez por proyecto.
+    const memberCache = new Map<string, string[]>()
+    const settingsCache = new Map<string, ContributionSettings>()
+
     const settled: string[] = []
-    for (const task of expired) {
-      const outcome = await this.settleTask(task.id)
+    for (const task of open) {
+      const expired = task.votingClosesAt == null || task.votingClosesAt <= now
+
+      let force = false
+      if (!expired) {
+        let members = memberCache.get(task.projectId)
+        if (!members) {
+          members = await getProjectMemberIds(task.projectId)
+          memberCache.set(task.projectId, members)
+        }
+        let settings = settingsCache.get(task.projectId)
+        if (!settings) {
+          settings = await contributionSettingsService.resolve(task.projectId)
+          settingsCache.set(task.projectId, settings)
+        }
+        const eligible = members.filter((id) => id !== task.assignedTo).length
+        const quorum = effectiveQuorum(settings.minVotes, eligible)
+        force = eligible > 0 && task._count.pointVotes >= quorum
+        if (!force) continue
+      }
+
+      const outcome = await this.settleTask(task.id, { force })
       if (outcome) settled.push(task.id)
     }
     return settled

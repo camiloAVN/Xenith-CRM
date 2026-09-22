@@ -55,9 +55,14 @@ export function isDbSaturationError(error: unknown): boolean {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function createClient() {
+  // `datasourceUrl` solo se pasa si la variable existe en el proceso: los
+  // scripts sueltos (`npx tsx`, seed, cron) NO cargan `.env`, y ahí la URL la
+  // resuelve el propio Prisma desde el schema. Pasarle `undefined` sería
+  // quitarle la única fuente que tiene.
+  const url = withPoolParams(process.env.DATABASE_URL)
   const client = new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-    datasourceUrl: withPoolParams(process.env.DATABASE_URL),
+    ...(url ? { datasourceUrl: url } : {}),
   })
 
   // Reintento en UN solo sitio: cubre todas las consultas de la app sin que

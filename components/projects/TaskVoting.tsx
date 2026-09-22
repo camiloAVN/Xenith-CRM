@@ -250,9 +250,10 @@ export function TaskVoting({ projectId, taskId, onSettled }: TaskVotingProps) {
             </p>
 
             <p className="text-xs text-gray-500">
-              {state.voteCount} de {state.eligibleVoterCount} voto
-              {state.eligibleVoterCount === 1 ? '' : 's'} · faltan{' '}
-              {Math.max(0, state.quorum - state.voteCount)} para el quórum
+              {state.voteCount} de {state.quorum} voto
+              {state.quorum === 1 ? '' : 's'} para cerrar
+              {state.eligibleVoterCount > state.quorum &&
+                ` · pueden votar ${state.eligibleVoterCount}`}
               {state.myVote != null && ` · tu voto: ${state.myVote}`}
             </p>
 
@@ -261,7 +262,8 @@ export function TaskVoting({ projectId, taskId, onSettled }: TaskVotingProps) {
             <p className="text-[11px] text-gray-600 leading-relaxed">
               Estima el <span className="text-gray-500">tamaño</span> de la
               tarea, no quién la hace: complejidad, incertidumbre y esfuerzo. La
-              votación cierra apenas voten los {state.eligibleVoterCount} o al
+              votación cierra apenas haya{' '}
+              {state.quorum === 1 ? 'un voto' : `${state.quorum} votos`} o al
               vencer el plazo, y el valor final es la mediana llevada al peldaño
               más cercano. Los votos individuales se revelan al cerrar.
             </p>

@@ -114,6 +114,8 @@ export default function ProjectDetailPage({
   // Falla de carga que NO es "no existe": base saturada, red caída. Se
   // distingue para ofrecer reintentar en vez de mandar a la lista.
   const [loadError, setLoadError] = useState<string | null>(null)
+  // Carga del tablero, independiente del spinner de la página.
+  const [isTasksLoading, setIsTasksLoading] = useState(true)
   const [selectedTask, setSelectedTask] = useState<TaskCardData | null>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [showNewTaskModal, setShowNewTaskModal] = useState(false)
@@ -190,14 +192,29 @@ export default function ProjectDetailPage({
     }
   }, [id, filters, sprintScope])
 
+  // Dos efectos separados A PROPÓSITO. Antes había uno solo que dependía de
+  // `loadTasks` y prendía `isLoading`: como `loadTasks` cambia de identidad
+  // cada vez que se mueve el alcance del sprint o un filtro, la página entera
+  // volvía al spinner, SprintBar se DESMONTABA y al montarse de nuevo perdía
+  // su `scopeInitialized` y devolvía el tablero al sprint activo. Ese era el
+  // "selecciono un sprint, parpadea en blanco y vuelve a lo de siempre".
   useEffect(() => {
-    const init = async () => {
-      setIsLoading(true)
-      await Promise.all([loadProject(), loadTasks()])
-      setIsLoading(false)
+    loadProject().finally(() => setIsLoading(false))
+  }, [loadProject])
+
+  // Las tareas se recargan solas al cambiar filtros o alcance, sin tocar el
+  // spinner de página: el tablero muestra su propio estado de carga.
+  useEffect(() => {
+    if (sprintScope === null) return
+    let cancelled = false
+    setIsTasksLoading(true)
+    loadTasks().finally(() => {
+      if (!cancelled) setIsTasksLoading(false)
+    })
+    return () => {
+      cancelled = true
     }
-    init()
-  }, [loadProject, loadTasks])
+  }, [loadTasks, sprintScope])
 
   // Refresh progress after task changes
   const refreshProgress = useCallback(async () => {
@@ -335,7 +352,7 @@ export default function ProjectDetailPage({
           <button
             onClick={() => {
               setIsLoading(true)
-              Promise.all([loadProject(), loadTasks()]).finally(() => setIsLoading(false))
+              loadProject().finally(() => setIsLoading(false))
             }}
             className="mt-3 px-3 py-1.5 rounded-lg border border-gray-700 text-sm text-gray-200 hover:bg-gray-800 transition-colors"
           >
@@ -484,7 +501,14 @@ export default function ProjectDetailPage({
       <ContributionShare projectId={id} refreshKey={contributionsKey} />
 
       {/* ---- Main view ---- */}
-      <div className="min-w-0">
+      <div className="min-w-0 relative">
+        {/* Recargar el tablero no lo vacía: se atenúa y se muestra el spinner
+            encima, para que cambiar de sprint no parezca que se perdió todo. */}
+        {isTasksLoading && (
+          <div className="absolute inset-0 z-10 flex items-start justify-center pt-12 bg-gray-950/50 rounded-lg">
+            <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
         {viewMode === 'kanban' && (
           <KanbanBoard
             projectId={id}
