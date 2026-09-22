@@ -70,7 +70,25 @@ async function withPenalty<T extends PenaltyTaskFields>(
   return tasks.map((task) => ({ ...task, penalty: buildPenaltyPreview(task, settings, now) }))
 }
 
+/**
+ * Último barrido por proyecto, en memoria de la instancia.
+ *
+ * El barrido perezoso recorre tareas vencidas y escribe: es la parte cara de
+ * abrir el tablero. Sin freno, dos personas mirando el mismo proyecto lo
+ * disparan en paralelo y multiplican las consultas contra una base que casi
+ * no tiene conexiones. Con 30 s de gracia nadie nota la diferencia —la
+ * ventana de votación se mide en horas— y el pico se corta de raíz.
+ */
+const lastSweep = new Map<string, number>()
+const SWEEP_INTERVAL_MS = 30_000
+
 async function settleExpiredVotings(projectId: string) {
+  const previous = lastSweep.get(projectId) ?? 0
+  if (Date.now() - previous < SWEEP_INTERVAL_MS) return
+  // Se marca ANTES de barrer: si dos peticiones entran a la vez, solo la
+  // primera hace el trabajo.
+  lastSweep.set(projectId, Date.now())
+
   try {
     const { taskValuationService } = await import('@/lib/services/task-valuation.service')
     await taskValuationService.settleExpired(projectId)

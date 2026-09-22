@@ -3,6 +3,7 @@ import { auth } from '@/auth'
 import { taskService, TaskPermissionError } from '@/lib/services/task.service'
 import { CreateTaskSchema, TaskFiltersSchema } from '@/lib/dto/task.dto'
 import { ZodError } from 'zod'
+import { isDbSaturationError } from '@/lib/db/prisma'
 
 // GET /api/v1/projects/[id]/tasks
 export async function GET(
@@ -37,6 +38,12 @@ export async function GET(
   } catch (error) {
     if (error instanceof ZodError) {
       return NextResponse.json({ error: 'Filtros inválidos', issues: error.issues }, { status: 400 })
+    }
+    if (isDbSaturationError(error)) {
+      return NextResponse.json(
+        { error: 'La base de datos está ocupada. Intenta de nuevo en unos segundos.', retryable: true },
+        { status: 503 }
+      )
     }
     console.error('Error fetching tasks:', error)
     return NextResponse.json({ error: 'Error al obtener tareas' }, { status: 500 })

@@ -14,6 +14,7 @@ Xenith CRM — a Next.js 16 application for managing clients, projects, and quot
 4. **El rol `prisma_migration` tiene MUY pocas conexiones.** Cada `npx tsx` contra producción, cada `prisma migrate` y cada `prisma studio` consume una, y tardan minutos en liberarse. Si se agotan:
    - los scripts locales fallan con `FATAL: too many connections for role "prisma_migration"`;
    - **y el deploy de Vercel se cae en el build**, aunque no haya migraciones pendientes.
+   **La app en runtime también pega contra ese rol.** Desde el 21-sep-2026 `lib/db/prisma.ts` la blinda: añade `connection_limit=1&pool_timeout=20&connect_timeout=10` a la URL (en serverless la concurrencia se resuelve con más instancias, no con más conexiones por instancia), cachea el cliente en `globalThis` **también en producción** y reintenta 3 veces las consultas que fallan por saturación (`P2024`, `P1001`, `too many connections`). Las rutas de tareas/votos devuelven **503 con `retryable: true`** en ese caso y el cliente reintenta solo (`lib/utils/fetch-retry.ts`). El arreglo de fondo sigue pendiente: una URL de **Prisma Accelerate** (`prisma+postgres://`) para runtime, dejando la directa solo para migraciones.
    Por eso el build pasa por `scripts/migrate-deploy.mjs`, que reintenta 4 veces cada 20 s **solo** ante ese error (cualquier otro error de migración sigue tumbando el build a propósito). Aun así: agrupa las verificaciones en UN script en vez de correr diez seguidos, y si el deploy falló por esto, espera unos minutos y vuelve a desplegar.
 
 ## Commands

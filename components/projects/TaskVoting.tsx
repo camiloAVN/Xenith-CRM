@@ -5,6 +5,7 @@ import { Vote, AlertTriangle, Lock, Clock3 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { FIBONACCI_SCALE, SCALE_ANCHORS } from '@/lib/services/point-scale'
 import toast from 'react-hot-toast'
+import { fetchWithRetry } from '@/lib/utils/fetch-retry'
 
 interface VoteRow {
   userId: string
@@ -53,13 +54,28 @@ export function TaskVoting({ projectId, taskId, onSettled }: TaskVotingProps) {
   // Ancla que se muestra debajo de los botones: la del peldaño que la persona
   // está mirando. Sin anclas la escala se infla sola con el tiempo.
   const [previewed, setPreviewed] = useState<number | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const url = `/api/v1/projects/${projectId}/tasks/${taskId}/votes`
 
+  /**
+   * Carga el estado de la votación. Si la base está saturada (503) reintenta
+   * sola un par de veces con espera: la caída de hoy fue justamente eso, dos
+   * personas votando al tiempo contra un pool de conexiones diminuto. Si aun
+   * así falla, se muestra el error con un botón — nunca se queda cargando.
+   */
   const load = useCallback(async () => {
     try {
-      const res = await fetch(url)
-      if (res.ok) setState(await res.json())
+      const res = await fetchWithRetry(url)
+      if (res.ok) {
+        setState(await res.json())
+        setLoadError(null)
+      } else {
+        const data = await res.json().catch(() => null)
+        setLoadError(data?.error || 'No se pudo cargar la votación')
+      }
+    } catch {
+      setLoadError('No se pudo cargar la votación')
     } finally {
       setIsLoading(false)
     }
@@ -74,7 +90,7 @@ export function TaskVoting({ projectId, taskId, onSettled }: TaskVotingProps) {
     if (isVoting) return
     setIsVoting(true)
     try {
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ value }),
@@ -82,8 +98,13 @@ export function TaskVoting({ projectId, taskId, onSettled }: TaskVotingProps) {
       const data = await res.json().catch(() => null)
       if (res.ok) {
         setState(data)
+        setLoadError(null)
         toast.success(`Votaste ${value} puntos`)
         if (data?.valuationStatus === 'VALUED') onSettled?.()
+      } else if (res.status === 503) {
+        // Base saturada: el voto no llegó a escribirse. Se avisa y se deja
+        // reintentar en vez de dar por perdida la sesión.
+        toast.error(data?.error || 'La base está ocupada, intenta de nuevo')
       } else {
         toast.error(data?.error || 'No se pudo registrar el voto')
         // La ventana pudo cerrarse mientras el panel estaba abierto.
@@ -94,10 +115,30 @@ export function TaskVoting({ projectId, taskId, onSettled }: TaskVotingProps) {
     }
   }
 
-  if (isLoading || !state) {
+  if (isLoading) {
     return (
       <div className="rounded-lg border border-gray-800 px-3 py-2.5">
         <div className="h-4 w-32 bg-gray-800 rounded animate-pulse" />
+      </div>
+    )
+  }
+
+  if (!state) {
+    return (
+      <div className="rounded-lg border border-gray-800 px-3 py-2.5 flex items-center justify-between gap-3">
+        <span className="flex items-center gap-1.5 text-xs text-amber-400">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          {loadError ?? 'No se pudo cargar la votación'}
+        </span>
+        <button
+          onClick={() => {
+            setIsLoading(true)
+            load()
+          }}
+          className="text-xs px-2 py-1 rounded-md border border-gray-700 text-gray-300 hover:bg-gray-800 transition-colors shrink-0"
+        >
+          Reintentar
+        </button>
       </div>
     )
   }

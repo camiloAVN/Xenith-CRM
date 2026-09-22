@@ -28,6 +28,7 @@ import { TaskCardData } from '@/components/projects/TaskCard'
 import { statusLabels, statusColors, priorityLabels, priorityColors } from '@/lib/validations/project'
 import { cn } from '@/lib/utils/cn'
 import toast from 'react-hot-toast'
+import { fetchWithRetry } from '@/lib/utils/fetch-retry'
 
 type ViewMode = 'kanban' | 'list' | 'gantt'
 type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'DONE' | 'BLOCKED'
@@ -110,6 +111,9 @@ export default function ProjectDetailPage({
     dueDateTo: '',
   })
   const [isLoading, setIsLoading] = useState(true)
+  // Falla de carga que NO es "no existe": base saturada, red caída. Se
+  // distingue para ofrecer reintentar en vez de mandar a la lista.
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedTask, setSelectedTask] = useState<TaskCardData | null>(null)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [showNewTaskModal, setShowNewTaskModal] = useState(false)
@@ -132,17 +136,27 @@ export default function ProjectDetailPage({
     try {
       // forSelect=true: la ruta sin el flag exige SUPERADMIN, y sin la lista
       // de usuarios los desplegables de asignación de tareas quedan vacíos.
+      //
+      // Con reintento: si la base rebota por saturación (503), la página se
+      // recupera sola en vez de quedarse en "proyecto no encontrado".
       const [projectRes, progressRes, usersRes] = await Promise.all([
-        fetch(`/api/v1/projects/${id}`),
-        fetch(`/api/v1/projects/${id}/progress`),
-        fetch('/api/users?forSelect=true'),
+        fetchWithRetry(`/api/v1/projects/${id}`),
+        fetchWithRetry(`/api/v1/projects/${id}/progress`),
+        fetchWithRetry('/api/users?forSelect=true'),
       ])
 
-      if (projectRes.ok) setProject(await projectRes.json())
+      if (projectRes.ok) {
+        setProject(await projectRes.json())
+        setLoadError(null)
+      } else if (projectRes.status !== 404) {
+        const data = await projectRes.json().catch(() => null)
+        setLoadError(data?.error ?? 'No se pudo cargar el proyecto')
+      }
       if (progressRes.ok) setProgress(await progressRes.json())
       if (usersRes.ok) setAllUsers(await usersRes.json())
     } catch (err) {
       console.error('Error loading project:', err)
+      setLoadError('No se pudo cargar el proyecto. Revisa tu conexión.')
     }
   }, [id])
 
@@ -162,8 +176,8 @@ export default function ProjectDetailPage({
       if (sprintScope !== 'all') kanbanParams.set('sprintId', sprintScope)
 
       const [listRes, kanbanRes] = await Promise.all([
-        fetch(`/api/v1/projects/${id}/tasks?${params}`),
-        fetch(`/api/v1/projects/${id}/tasks?${kanbanParams}`),
+        fetchWithRetry(`/api/v1/projects/${id}/tasks?${params}`),
+        fetchWithRetry(`/api/v1/projects/${id}/tasks?${kanbanParams}`),
       ])
 
       if (listRes.ok) setAllTasks(await listRes.json())
@@ -316,10 +330,22 @@ export default function ProjectDetailPage({
   if (!project) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-400">Proyecto no encontrado</p>
-        <Link href="/dashboard/proyectos" className="text-violet-400 text-sm hover:underline mt-2 block">
-          Volver a proyectos
-        </Link>
+        <p className="text-gray-400">{loadError ?? 'Proyecto no encontrado'}</p>
+        {loadError ? (
+          <button
+            onClick={() => {
+              setIsLoading(true)
+              Promise.all([loadProject(), loadTasks()]).finally(() => setIsLoading(false))
+            }}
+            className="mt-3 px-3 py-1.5 rounded-lg border border-gray-700 text-sm text-gray-200 hover:bg-gray-800 transition-colors"
+          >
+            Reintentar
+          </button>
+        ) : (
+          <Link href="/dashboard/proyectos" className="text-violet-400 text-sm hover:underline mt-2 block">
+            Volver a proyectos
+          </Link>
+        )}
       </div>
     )
   }

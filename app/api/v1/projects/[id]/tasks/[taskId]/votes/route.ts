@@ -4,6 +4,17 @@ import { taskValuationService } from '@/lib/services/task-valuation.service'
 import { TaskPermissionError } from '@/lib/services/task.service'
 import { CastVoteSchema } from '@/lib/dto/task.dto'
 import { ZodError } from 'zod'
+import { isDbSaturationError } from '@/lib/db/prisma'
+
+/**
+ * La base tiene pocas conexiones: cuando se saturan, la petición no es un bug
+ * sino algo que hay que reintentar. 503 + mensaje claro, en vez de un 404 o un
+ * 500 que dejan el panel colgado.
+ */
+const SATURATED = NextResponse.json(
+  { error: 'La base de datos está ocupada. Intenta de nuevo en unos segundos.', retryable: true },
+  { status: 503 }
+)
 
 // GET /api/v1/projects/[id]/tasks/[taskId]/votes — estado de la votación
 export async function GET(
@@ -23,6 +34,7 @@ export async function GET(
     const state = await taskValuationService.getVotingState(taskId, session.user.id as string)
     return NextResponse.json(state)
   } catch (error) {
+    if (isDbSaturationError(error)) return SATURATED
     if (error instanceof Error) {
       return NextResponse.json({ error: error.message }, { status: 404 })
     }
@@ -59,6 +71,7 @@ export async function POST(
     if (error instanceof TaskPermissionError) {
       return NextResponse.json({ error: error.message }, { status: 403 })
     }
+    if (isDbSaturationError(error)) return SATURATED
     if (error instanceof Error) {
       return NextResponse.json({ error: error.message }, { status: 422 })
     }
