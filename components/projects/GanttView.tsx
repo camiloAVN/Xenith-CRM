@@ -4,7 +4,7 @@ import { useMemo, useRef, useEffect, useCallback } from 'react'
 import { TaskCardData } from './TaskCard'
 import { TaskPointsBadge } from './TaskPointsBadge'
 import { cn } from '@/lib/utils/cn'
-import { dueDeadline, isPastDue } from '@/lib/utils/due-date'
+import { dueDayAnchor, isPastDue } from '@/lib/utils/due-date'
 
 interface GanttViewProps {
   tasks: TaskCardData[]
@@ -52,7 +52,7 @@ export function GanttView({ tasks, projectStart, projectEnd, onTaskClick }: Gant
     const dates: Date[] = []
     if (projectStart) dates.push(new Date(projectStart))
     if (projectEnd)   dates.push(new Date(projectEnd))
-    tasksWithDate.forEach((t) => dates.push(dueDeadline(t.dueDate!)))
+    tasksWithDate.forEach((t) => dates.push(dueDayAnchor(t.dueDate!)))
 
     if (dates.length === 0) {
       const now = new Date()
@@ -256,7 +256,7 @@ export function GanttView({ tasks, projectStart, projectEnd, onTaskClick }: Gant
             {tasksWithDate.map((task, rowIdx) => {
               const y       = HEADER_HEIGHT + rowIdx * ROW_HEIGHT
               const dueIdx  = Math.floor(
-                (startOfDay(dueDeadline(task.dueDate!)).getTime() - rangeStart.getTime()) / 86400000
+                (startOfDay(dueDayAnchor(task.dueDate!)).getTime() - rangeStart.getTime()) / 86400000
               )
               const barX    = dueIdx * DAY_WIDTH
               const color   = STATUS_COLORS[task.status] ?? '#6b7280'

@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db/prisma'
 import { getProjectMemberIds } from '@/lib/auth/permissions'
 import { getRequiredApproverIds } from '@/lib/services/task-lifecycle'
-import { dueDeadline, isPastDue } from '@/lib/utils/due-date'
+import { dueDayAnchor, dueDeadline, isPastDue } from '@/lib/utils/due-date'
 
 /**
  * Lo que el bot de Telegram necesita saber de cada persona: sus pendientes y,
@@ -67,9 +67,9 @@ function toBotTask(t: {
     title: t.title,
     projectId: t.projectId,
     project: t.project.title,
-    // El vencimiento real (mediodía de Bogotá), no la medianoche UTC guardada
+    // El ancla del día (mediodía de Bogotá), no la medianoche UTC guardada
     // en filas viejas: si no, el bot mostraría el día anterior.
-    dueDate: t.dueDate ? dueDeadline(t.dueDate).toISOString() : null,
+    dueDate: t.dueDate ? dueDayAnchor(t.dueDate).toISOString() : null,
     sprint: t.sprint?.name ?? null,
   }
 }
