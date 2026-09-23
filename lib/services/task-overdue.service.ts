@@ -4,6 +4,7 @@ import { contributionSettingsService } from '@/lib/services/contribution-setting
 import { TaskPermissionError } from '@/lib/services/task.service'
 import { shouldChargeOverdue } from '@/lib/services/task-penalty'
 import { notificationService } from '@/lib/services/notification.service'
+import { parseDueDate } from '@/lib/utils/due-date'
 
 /**
  * Vencimiento automático y revaluación.
@@ -192,7 +193,7 @@ export const taskOverdueService = {
           revaluationRequestedAt: null,
           revaluationReason: null,
           ...(options.newDueDate !== undefined
-            ? { dueDate: options.newDueDate ? new Date(options.newDueDate) : null }
+            ? { dueDate: options.newDueDate ? parseDueDate(options.newDueDate) : null }
             : {}),
           // Fecha nueva = borrón y cuenta nueva: el cobro del vencimiento
           // anterior ya está en el ledger y ahí se queda, pero la tarea puede

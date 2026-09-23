@@ -21,6 +21,8 @@
  * decidió una sola regla, clara y fuerte, en vez de tres porcentajes.
  */
 
+import { dueDeadline, isPastDue } from '@/lib/utils/due-date'
+
 const round2 = (n: number) => Math.round(n * 100) / 100
 
 /** Vista del vencimiento de una tarea, tal como la consumen las 4 vistas. */
@@ -64,7 +66,7 @@ export function shouldChargeOverdue(
   if (task.assignedTo === null) return false
   if (task.valuationStatus !== undefined && task.valuationStatus !== 'VALUED') return false
   if (task.pointsValue == null) return false
-  return task.dueDate != null && task.dueDate < now
+  return isPastDue(task.dueDate, now)
 }
 
 export function buildPenaltyPreview(
@@ -77,7 +79,7 @@ export function buildPenaltyPreview(
     task.revaluationRequestedAt != null && task.completionStatus !== 'ACCEPTED'
 
   const hoursLeft = task.dueDate
-    ? round2((task.dueDate.getTime() - now.getTime()) / 3_600_000)
+    ? round2((dueDeadline(task.dueDate).getTime() - now.getTime()) / 3_600_000)
     : null
 
   if (task.completionStatus === 'ACCEPTED') {
@@ -98,8 +100,7 @@ export function buildPenaltyPreview(
     isOverdue:
       !inRevaluation &&
       task.completionStatus === 'PENDING' &&
-      task.dueDate != null &&
-      task.dueDate < now,
+      isPastDue(task.dueDate, now),
     overdueCharged: task.overdueChargedAt != null,
     inRevaluation,
     hoursLeft,

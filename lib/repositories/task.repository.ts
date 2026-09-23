@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db/prisma'
 import { TaskFiltersDTO, CreateTaskDTO, UpdateTaskDTO } from '@/lib/dto/task.dto'
 import { TaskStatus } from '@prisma/client'
+import { dueDayEnd, dueDayStart, parseDueDate } from '@/lib/utils/due-date'
 
 /** Estado inicial de las capas de puntos, calculado por el servicio. */
 export interface TaskLifecycleInit {
@@ -58,8 +59,8 @@ export const taskRepository = {
     }
     if (filters.dueDateFrom || filters.dueDateTo) {
       where.dueDate = {}
-      if (filters.dueDateFrom) (where.dueDate as Record<string, unknown>).gte = new Date(filters.dueDateFrom)
-      if (filters.dueDateTo) (where.dueDate as Record<string, unknown>).lte = new Date(filters.dueDateTo)
+      if (filters.dueDateFrom) (where.dueDate as Record<string, unknown>).gte = dueDayStart(filters.dueDateFrom)
+      if (filters.dueDateTo) (where.dueDate as Record<string, unknown>).lte = dueDayEnd(filters.dueDateTo)
     }
 
     return prisma.task.findMany({
@@ -92,7 +93,7 @@ export const taskRepository = {
         priority: data.priority ?? 'MEDIUM',
         assignedTo: data.assignedTo ?? null,
         reporterId: data.reporterId ?? null,
-        dueDate: data.dueDate ? new Date(data.dueDate) : null,
+        dueDate: data.dueDate ? parseDueDate(data.dueDate) : null,
         sprintId: data.sprintId ?? null,
         estimatedHours: data.estimatedHours ?? null,
         actualHours: data.actualHours ?? null,
@@ -118,7 +119,7 @@ export const taskRepository = {
         ...(data.priority !== undefined && { priority: data.priority }),
         ...(data.assignedTo !== undefined && { assignedTo: data.assignedTo }),
         ...(data.reporterId !== undefined && { reporterId: data.reporterId }),
-        ...(data.dueDate !== undefined && { dueDate: data.dueDate ? new Date(data.dueDate) : null }),
+        ...(data.dueDate !== undefined && { dueDate: data.dueDate ? parseDueDate(data.dueDate) : null }),
         ...(data.sprintId !== undefined && { sprintId: data.sprintId }),
         ...(data.estimatedHours !== undefined && { estimatedHours: data.estimatedHours }),
         ...(data.actualHours !== undefined && { actualHours: data.actualHours }),

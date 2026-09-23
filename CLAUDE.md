@@ -226,6 +226,7 @@ Se reabre aceptada   → IN_PROGRESS · asiento negativo TASK_REVERTED
 
 La regla es **una sola y es dura** (decisión del equipo, 18-sep-2026): pasarse de `dueDate` sin entregar cuesta **el valor entero de la tarea**.
 
+- **Vence a las 12:00 m (Bogotá) del día marcado** (22-sep-2026). Todo cálculo de fecha límite pasa por `lib/utils/due-date.ts` (`parseDueDate`, `dueDeadline`, `isPastDue`, `formatDueDate`, `dueDateKey`); nunca `new Date(task.dueDate)` suelto. Motivo: `new Date('2026-09-23')` es medianoche UTC = el 22 a las 7 pm en Bogotá, y las tareas salían vencidas (y mostradas) un día antes. El día de la tarea es la fecha UTC de lo guardado, así que las filas viejas (00:00Z) y las nuevas (17:00Z) funcionan igual sin migrar datos.
 - Al vencer se escribe **un** asiento `TASK_OVERDUE` de `−pointsValue` y la tarea queda marcada con `overdueChargedAt` para no cobrarlo dos veces. `taskOverdueService.chargeOverdue()` corre en el **barrido perezoso** (al abrir el tablero) y en el cron.
 - **El saldo puede quedar negativo.** Con saldo negativo la persona no cobra nada del reparto: queda en 0, nunca en deuda (`splitPool` solo mira saldos positivos, y `getProjectContributions` suma solo los positivos para el total — si sumara los negativos, los porcentajes de todos saldrían mal).
 - **Entregar detiene el reloj:** en `SUBMITTED` no se cobra; la demora de los jefes en revisar no le cuesta puntos a quien ya entregó.

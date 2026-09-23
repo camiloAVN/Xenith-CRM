@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ChevronUp, ChevronDown, Calendar, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
+import { dueDeadline, formatDueDate, isPastDue } from '@/lib/utils/due-date'
 import { TaskCardData } from './TaskCard'
 import { TaskPointsBadge } from './TaskPointsBadge'
 
@@ -67,8 +68,8 @@ export function ListView({ tasks, onTaskClick }: ListViewProps) {
         cmp = priorityOrder[a.priority] - priorityOrder[b.priority]
         break
       case 'dueDate': {
-        const da = a.dueDate ? new Date(a.dueDate).getTime() : Infinity
-        const db = b.dueDate ? new Date(b.dueDate).getTime() : Infinity
+        const da = a.dueDate ? dueDeadline(a.dueDate).getTime() : Infinity
+        const db = b.dueDate ? dueDeadline(b.dueDate).getTime() : Infinity
         cmp = da - db
         break
       }
@@ -120,7 +121,7 @@ export function ListView({ tasks, onTaskClick }: ListViewProps) {
         sorted.map((task) => {
           const status = statusConfig[task.status]
           const priority = priorityConfig[task.priority]
-          const overdue = task.dueDate && new Date(task.dueDate) < new Date()
+          const overdue = isPastDue(task.dueDate)
 
           return (
             <div
@@ -166,9 +167,7 @@ export function ListView({ tasks, onTaskClick }: ListViewProps) {
                 {task.dueDate ? (
                   <>
                     <Calendar className="w-3 h-3" />
-                    {new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short' }).format(
-                      new Date(task.dueDate)
-                    )}
+                    {formatDueDate(task.dueDate, { day: 'numeric', month: 'short' }, 'es-MX')}
                   </>
                 ) : (
                   <span className="text-gray-600">—</span>

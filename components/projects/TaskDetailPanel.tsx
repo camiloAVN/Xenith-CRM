@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { X, Trash2, ChevronDown, Clock, History, CheckCircle2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils/cn'
+import { dueDateKey } from '@/lib/utils/due-date'
 import { TaskVoting } from './TaskVoting'
 import { TaskApproval } from './TaskApproval'
 import { TaskPenalty, type TaskPenaltyData } from './TaskPenalty'
@@ -515,7 +516,7 @@ export function TaskDetailPanel({
                   <label className="text-xs text-gray-500 block mb-1">Fecha límite</label>
                   <input
                     type="date"
-                    value={ft.dueDate ? new Date(ft.dueDate).toISOString().split('T')[0] : ''}
+                    value={ft.dueDate ? dueDateKey(ft.dueDate) : ''}
                     // Desde la Fase 2 la fecha es informativa: lo que descuenta
                     // es el sprint, así que se puede dejar vacía.
                     onChange={(e) => updateField('dueDate', e.target.value || null)}

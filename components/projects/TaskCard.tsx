@@ -4,6 +4,7 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { Calendar, Clock, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
+import { formatDueDate, isPastDue } from '@/lib/utils/due-date'
 import { TaskPointsBadge, type TaskPointsData } from './TaskPointsBadge'
 
 export interface TaskCardData {
@@ -37,12 +38,11 @@ function getUserInitial(user: { name?: string | null; email: string }) {
 }
 
 function isOverdue(dueDate: string | Date | null | undefined) {
-  if (!dueDate) return false
-  return new Date(dueDate) < new Date()
+  return isPastDue(dueDate)
 }
 
 function formatDate(date: string | Date) {
-  return new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short' }).format(new Date(date))
+  return formatDueDate(date, { day: 'numeric', month: 'short' }, 'es-MX')
 }
 
 interface TaskCardProps {

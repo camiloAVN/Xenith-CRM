@@ -4,6 +4,7 @@ import { useMemo, useRef, useEffect, useCallback } from 'react'
 import { TaskCardData } from './TaskCard'
 import { TaskPointsBadge } from './TaskPointsBadge'
 import { cn } from '@/lib/utils/cn'
+import { dueDeadline, isPastDue } from '@/lib/utils/due-date'
 
 interface GanttViewProps {
   tasks: TaskCardData[]
@@ -51,7 +52,7 @@ export function GanttView({ tasks, projectStart, projectEnd, onTaskClick }: Gant
     const dates: Date[] = []
     if (projectStart) dates.push(new Date(projectStart))
     if (projectEnd)   dates.push(new Date(projectEnd))
-    tasksWithDate.forEach((t) => dates.push(new Date(t.dueDate!)))
+    tasksWithDate.forEach((t) => dates.push(dueDeadline(t.dueDate!)))
 
     if (dates.length === 0) {
       const now = new Date()
@@ -130,7 +131,7 @@ export function GanttView({ tasks, projectStart, projectEnd, onTaskClick }: Gant
 
           {/* Task label rows */}
           {tasksWithDate.map((task, i) => {
-            const overdue = new Date(task.dueDate!) < today && task.status !== 'DONE'
+            const overdue = isPastDue(task.dueDate) && task.status !== 'DONE'
             return (
               <div
                 key={task.id}
@@ -255,11 +256,11 @@ export function GanttView({ tasks, projectStart, projectEnd, onTaskClick }: Gant
             {tasksWithDate.map((task, rowIdx) => {
               const y       = HEADER_HEIGHT + rowIdx * ROW_HEIGHT
               const dueIdx  = Math.floor(
-                (startOfDay(new Date(task.dueDate!)).getTime() - rangeStart.getTime()) / 86400000
+                (startOfDay(dueDeadline(task.dueDate!)).getTime() - rangeStart.getTime()) / 86400000
               )
               const barX    = dueIdx * DAY_WIDTH
               const color   = STATUS_COLORS[task.status] ?? '#6b7280'
-              const isOver  = new Date(task.dueDate!) < today && task.status !== 'DONE'
+              const isOver  = isPastDue(task.dueDate) && task.status !== 'DONE'
 
               return (
                 <g key={task.id} onClick={() => onTaskClick?.(task)}

@@ -1,5 +1,6 @@
 import { APP_URL, esc, shellStart, shellEnd, footer } from './shell'
 import { SCALE_ANCHORS, describeScale } from '@/lib/services/point-scale'
+import { formatDueDate } from '@/lib/utils/due-date'
 
 /**
  * Las anclas, resumidas para el correo: sin ellas la escala se infla sola.
@@ -30,12 +31,6 @@ export interface TaskEmailContext {
   dueDate?: Date | null
 }
 
-const dateFmt = new Intl.DateTimeFormat('es-CO', {
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-})
-
 function header(eyebrow: string, title: string): string {
   return `
         <tr><td style="background:#05070e;border-radius:16px 16px 0 0;padding:32px 40px;text-align:center;">
@@ -63,7 +58,7 @@ function taskCard(ctx: TaskEmailContext, extra?: string): string {
             <p style="margin:10px 0 0;font-size:13px;color:#97a3bb;">
               Asignada a <strong style="color:#eef2fb;">${esc(ctx.assigneeName)}</strong>${
                 ctx.dueDate
-                  ? ` · vence el ${esc(dateFmt.format(new Date(ctx.dueDate)))}`
+                  ? ` · vence el ${esc(formatDueDate(ctx.dueDate, { day: 'numeric', month: 'long', year: 'numeric' }))}`
                   : ''
               }
             </p>
