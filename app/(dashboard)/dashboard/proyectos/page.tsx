@@ -61,14 +61,14 @@ export default function ProjectsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Proyectos</h1>
-          <p className="text-gray-400 mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold">Proyectos</h1>
+          <p className="text-sm sm:text-base text-gray-400 mt-1">
             Gestiona tus proyectos y su progreso
           </p>
         </div>
         {canCreateProjects && (
-          <Link href="/dashboard/proyectos/nuevo">
-            <Button variant="primary">
+          <Link href="/dashboard/proyectos/nuevo" className="w-full sm:w-auto">
+            <Button variant="primary" className="w-full sm:w-auto">
               <Plus className="w-4 h-4 mr-2" />
               Nuevo Proyecto
             </Button>
@@ -76,11 +76,11 @@ export default function ProjectsPage() {
         )}
       </div>
 
-      <Card>
+      <Card className="p-4 sm:p-6">
         <Card.Header>
           <form onSubmit={handleSearch} className="space-y-4">
             <div className="flex gap-2">
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <Input
                   placeholder="Buscar proyectos..."
                   value={localSearch}
@@ -88,16 +88,20 @@ export default function ProjectsPage() {
                   leftIcon={<Search className="w-4 h-4" />}
                 />
               </div>
-              <Button type="submit" variant="outline">
-                Buscar
+              {/* En móvil los botones quedan solo con ícono para que el buscador respire */}
+              <Button type="submit" variant="outline" className="shrink-0 px-3 sm:px-4" aria-label="Buscar">
+                <Search className="w-4 h-4 sm:hidden" />
+                <span className="hidden sm:inline">Buscar</span>
               </Button>
               <Button
                 type="button"
                 variant="outline"
+                className="shrink-0 px-3 sm:px-4"
                 onClick={() => setShowFilters(!showFilters)}
+                aria-label="Filtros"
               >
-                <Filter className="w-4 h-4 mr-2" />
-                Filtros
+                <Filter className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Filtros</span>
               </Button>
             </div>
 
