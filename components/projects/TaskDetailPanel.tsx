@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { X, Trash2, ChevronDown, Clock, History, CheckCircle2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils/cn'
@@ -162,14 +162,21 @@ export function TaskDetailPanel({
 
   const taskUrl = task ? `/api/v1/projects/${projectId}/tasks/${task.id}` : null
 
+  // Tarea que el panel muestra AHORA. Si se abre otra antes de que responda la
+  // carga de la anterior, esa respuesta tardía no debe pisar la nueva.
+  const currentTaskId = useRef<string | null>(null)
+  currentTaskId.current = task?.id ?? null
+
   // Load full task data (with comments + history)
   const loadFullTask = useCallback(async () => {
     if (!task) return
+    const requestedId = task.id
     setIsLoadingFull(true)
     try {
       const res = await fetch(taskUrl!)
       if (res.ok) {
         const data = await res.json()
+        if (currentTaskId.current !== requestedId) return
         setFullTask(data)
         setTitleDraft(data.title)
         setDescDraft(data.description ?? '')
@@ -277,7 +284,8 @@ export function TaskDetailPanel({
 
   if (!isOpen) return null
 
-  const ft = fullTask
+  // Mientras el efecto no ha cambiado fullTask, no mostrar la tarea anterior.
+  const ft = fullTask && task && fullTask.id !== task.id ? task : fullTask
 
   return (
     <>
@@ -368,6 +376,7 @@ export function TaskDetailPanel({
 
               {/* Valoración por puntos — corre en paralelo al trabajo. */}
               <TaskVoting
+                key={ft.id}
                 projectId={projectId}
                 taskId={ft.id}
                 onSettled={loadFullTask}
@@ -376,6 +385,7 @@ export function TaskDetailPanel({
               {/* Fecha límite: lo que cuesta pasarse y la salida a tiempo
                   (pedir revaluación). Pasarse cuesta el valor completo. */}
               <TaskPenalty
+                key={ft.id}
                 penalty={ft.penalty}
                 projectId={projectId}
                 taskId={ft.id}
@@ -403,6 +413,7 @@ export function TaskDetailPanel({
               {/* Aprobación de los jefes + acreditación. Se oculta solo cuando
                   la tarea aún no se ha marcado como terminada. */}
               <TaskApproval
+                key={ft.id}
                 projectId={projectId}
                 taskId={ft.id}
                 canManageTasks={canManageTasks}
@@ -619,6 +630,7 @@ export function TaskDetailPanel({
 
                 {activeTab === 'comments' && (
                   <TaskComments
+                    key={ft.id}
                     taskId={ft.id}
                     projectId={projectId}
                     comments={ft.comments ?? []}
@@ -647,7 +659,7 @@ export function TaskDetailPanel({
                 )}
 
                 {activeTab === 'history' && (
-                  <TaskHistory history={ft.history ?? []} />
+                  <TaskHistory key={ft.id} history={ft.history ?? []} />
                 )}
               </div>
             </div>

@@ -51,9 +51,6 @@ export function TaskVoting({ projectId, taskId, onSettled }: TaskVotingProps) {
   const [state, setState] = useState<VotingState | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isVoting, setIsVoting] = useState(false)
-  // Ancla que se muestra debajo de los botones: la del peldaño que la persona
-  // está mirando. Sin anclas la escala se infla sola con el tiempo.
-  const [previewed, setPreviewed] = useState<number | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const url = `/api/v1/projects/${projectId}/tasks/${taskId}/votes`
@@ -145,8 +142,6 @@ export function TaskVoting({ projectId, taskId, onSettled }: TaskVotingProps) {
 
   const isClosed = state.valuationStatus === 'VALUED'
   const scale = state.scale?.length ? state.scale : [...FIBONACCI_SCALE]
-  const anchorFor = previewed ?? state.myVote
-  const anchor = anchorFor != null ? SCALE_ANCHORS[anchorFor] : null
 
   return (
     <div className="rounded-lg border border-gray-800 overflow-hidden">
@@ -185,6 +180,13 @@ export function TaskVoting({ projectId, taskId, onSettled }: TaskVotingProps) {
               </span>
             </div>
 
+            {state.pointsValue != null && SCALE_ANCHORS[state.pointsValue] && (
+              <p className="text-[11px] text-gray-500">
+                Equivale a: {SCALE_ANCHORS[state.pointsValue].label}
+                <span className="text-gray-600"> · {SCALE_ANCHORS[state.pointsValue].hint}</span>
+              </p>
+            )}
+
             {state.votes.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {state.votes.map((v) => (
@@ -202,52 +204,64 @@ export function TaskVoting({ projectId, taskId, onSettled }: TaskVotingProps) {
           </>
         ) : (
           <>
-            {state.canVote ? (
-              <div className="flex flex-wrap gap-1.5">
-                {scale.map((value) => (
-                  <button
-                    key={value}
-                    onClick={() => handleVote(value)}
-                    onMouseEnter={() => setPreviewed(value)}
-                    onMouseLeave={() => setPreviewed(null)}
-                    onFocus={() => setPreviewed(value)}
-                    onBlur={() => setPreviewed(null)}
-                    disabled={isVoting}
-                    title={
-                      SCALE_ANCHORS[value]
-                        ? `${SCALE_ANCHORS[value].label} — ${SCALE_ANCHORS[value].hint}`
-                        : undefined
-                    }
-                    className={cn(
-                      'w-9 h-9 rounded-lg border text-sm font-medium tabular-nums transition-colors disabled:opacity-50',
-                      state.myVote === value
-                        ? 'bg-violet-500/25 border-violet-500/60 text-violet-200'
-                        : value === scale[scale.length - 1]
-                          ? 'bg-gray-800 border-amber-500/40 text-amber-300/90 hover:border-amber-400 hover:text-amber-200'
-                          : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500 hover:text-gray-100'
-                    )}
-                  >
-                    {value}
-                  </button>
-                ))}
-              </div>
-            ) : (
+            {!state.canVote && (
               <p className="text-xs text-gray-500">{state.reason ?? 'No puedes votar esta tarea'}</p>
             )}
 
-            <p className="min-h-[1.25rem] text-[11px] leading-5 text-gray-500">
-              {anchor ? (
-                <>
-                  <span className="font-mono text-violet-300">{anchorFor}</span>{' '}
-                  = {anchor.label}
-                  <span className="text-gray-600"> · {anchor.hint}</span>
-                </>
-              ) : (
-                <span className="text-gray-600">
-                  Pasa por encima de un número para ver a qué equivale.
-                </span>
-              )}
-            </p>
+            {/* Escala con sus anclas siempre a la vista, para todos (también el
+                asignado): votar sin saber qué significa cada número infla la
+                escala. Quien puede votar hace clic en la fila. */}
+            <div className="rounded-lg border border-gray-800 divide-y divide-gray-800/70">
+              {scale.map((value) => {
+                const a = SCALE_ANCHORS[value]
+                const isMine = state.myVote === value
+                const isTop = value === scale[scale.length - 1]
+                const content = (
+                  <>
+                    <span
+                      className={cn(
+                        'w-8 h-7 shrink-0 inline-flex items-center justify-center rounded-md border text-sm font-medium tabular-nums',
+                        isMine
+                          ? 'bg-violet-500/25 border-violet-500/60 text-violet-200'
+                          : isTop
+                            ? 'bg-gray-800 border-amber-500/40 text-amber-300/90'
+                            : 'bg-gray-800 border-gray-700 text-gray-300'
+                      )}
+                    >
+                      {value}
+                    </span>
+                    <span className="min-w-0 text-left leading-tight">
+                      <span className={cn('block text-xs', isMine ? 'text-violet-200' : 'text-gray-300')}>
+                        {a?.label ?? `${value} puntos`}
+                      </span>
+                      {a?.hint && <span className="block text-[11px] text-gray-500">{a.hint}</span>}
+                    </span>
+                    {isMine && (
+                      <span className="ml-auto text-[10px] uppercase tracking-wide text-violet-300 shrink-0">
+                        tu voto
+                      </span>
+                    )}
+                  </>
+                )
+                return state.canVote ? (
+                  <button
+                    key={value}
+                    onClick={() => handleVote(value)}
+                    disabled={isVoting}
+                    className={cn(
+                      'w-full flex items-center gap-2.5 px-2 py-1.5 transition-colors disabled:opacity-50',
+                      isMine ? 'bg-violet-500/10' : 'hover:bg-gray-800/60'
+                    )}
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  <div key={value} className="flex items-center gap-2.5 px-2 py-1.5">
+                    {content}
+                  </div>
+                )
+              })}
+            </div>
 
             <p className="text-xs text-gray-500">
               {state.voteCount} de {state.quorum} voto
