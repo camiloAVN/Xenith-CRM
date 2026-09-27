@@ -12,6 +12,7 @@ import { getProjectPermissions, getProjectMemberIds } from '@/lib/auth/permissio
 import { contributionSettingsService } from '@/lib/services/contribution-settings.service'
 import { canSubmitCompletion, canAssigneeChangeStatus } from '@/lib/services/task-lifecycle'
 import { notificationService } from '@/lib/services/notification.service'
+import { dueDateKey } from '@/lib/utils/due-date'
 import {
   buildPenaltyPreview,
   type PenaltyTaskFields,
@@ -347,6 +348,24 @@ export const taskService = {
 
     // Update task
     const updated = await taskRepository.update(taskId, data)
+
+    // Fecha nueva = borrón y cuenta nueva, igual que al resolver una
+    // revaluación: el cobro anterior se queda en el ledger, pero la tarea
+    // vuelve a vigilarse y puede vencer (y cobrarse) contra la fecha nueva.
+    // Sin esto, mover la fecha de una tarea ya cobrada la dejaba inmune.
+    // Se compara el DÍA: el cliente manda '2026-09-30' y lo guardado es un
+    // Date, así que comparar el texto crudo reiniciaría el cobro en cada
+    // guardado y una tarea vencida se cobraría dos veces.
+    const dueDayChanged =
+      data.dueDate !== undefined &&
+      (data.dueDate ? dueDateKey(data.dueDate) : null) !==
+        (existing.dueDate ? dueDateKey(existing.dueDate) : null)
+    if (dueDayChanged) {
+      await prisma.task.updateMany({
+        where: { id: taskId, overdueChargedAt: { not: null } },
+        data: { overdueChargedAt: null },
+      })
+    }
 
     // Write history in background (non-blocking)
     if (historyEntries.length > 0) {
